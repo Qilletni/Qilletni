@@ -2,6 +2,7 @@ plugins {
     id 'antlr'
     id 'idea'
     id 'maven-publish'
+    id 'com.vanniktech.maven.publish' version '0.35.0'
 }
 
 group = 'dev.qilletni.impl'
@@ -21,12 +22,42 @@ dependencies {
 
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    implementation 'dev.qilletni.api:qilletni-api:1.0.0-SNAPSHOT'
+    implementation project(':qilletni-api')
     implementation 'dev.qilletni.pkgutil:qilletni-pkgutil:1.0.0-SNAPSHOT'
 }
 
 tasks.withType(JavaCompile).each {
     it.options.compilerArgs.add('--enable-preview')
+}
+
+mavenPublishing {
+    coordinates(group, "qilletni", version)
+
+    pom {
+        name = "Qilletni"
+        description = "Implementation of the Qilletni DSL"
+        inceptionYear = "2024"
+        url = "https://qilletni.dev/"
+        licenses {
+            license {
+                name = "MIT"
+                url = "https://mit-license.org/"
+                distribution = "https://mit-license.org/"
+            }
+        }
+        developers {
+            developer {
+                id = "RubbaBoy"
+                name = "Adam Yarris"
+                url = "https://github.com/RubbaBoy/"
+            }
+        }
+        scm {
+            url = "https://github.com/Qilletni/Qilletni"
+            connection = "scm:git:git://github.com/Qilletni/Qilletni.git"
+            developerConnection = "scm:git:ssh://git@github.com/Qilletni/Qilletni.git"
+        }
+    }
 }
 
 generateGrammarSource {
@@ -53,17 +84,14 @@ idea {
 allprojects {
     apply plugin: 'java'
     apply plugin: 'maven-publish'
+    apply plugin: 'com.vanniktech.maven.publish'
 
     repositories {
-        mavenCentral()
         mavenLocal()
+        mavenCentral()
 
         maven {
-            url = "https://maven.pkg.github.com/rubbaboy/Qilletni"
-            credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
-            }
+            url = 'https://central.sonatype.com/repository/maven-snapshots/'
         }
     }
 
@@ -71,27 +99,6 @@ allprojects {
         withSourcesJar()
         sourceCompatibility = '22'
         targetCompatibility = '22'
-    }
-
-    publishing {
-        publications {
-            mavenJava(MavenPublication) {
-                from components.java
-            }
-        }
-
-        if (name != "qilletni-provider-demo") {
-            repositories {
-                maven {
-                    name = "GitHubPackages"
-                    url = "https://maven.pkg.github.com/rubbaboy/Qilletni"
-                    credentials {
-                        username = System.getenv("GITHUB_ACTOR")
-                        password = System.getenv("GITHUB_TOKEN")
-                    }
-                }
-            }
-        }
     }
 }
 

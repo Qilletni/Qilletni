@@ -1,0 +1,50 @@
+name: Publish SNAPSHOT
+
+on:
+  push:
+    branches: [ master ]
+    tags-ignore:
+      - 'v*.*.*'
+
+jobs:
+  publish-snapshot:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Check version is SNAPSHOT
+        run: |
+          ROOT_VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
+          API_VERSION=$(./gradlew :qilletni-api:properties -q | grep "^version:" | awk '{print $2}')
+
+          echo "Root project version: $ROOT_VERSION"
+          echo "qilletni-api version: $API_VERSION"
+
+          if [[ ! "$ROOT_VERSION" =~ -SNAPSHOT$ ]]; then
+            echo "Error: Root version $ROOT_VERSION is not a SNAPSHOT. Refusing to publish."
+            exit 1
+          fi
+
+          if [[ ! "$API_VERSION" =~ -SNAPSHOT$ ]]; then
+            echo "Error: qilletni-api version $API_VERSION is not a SNAPSHOT. Refusing to publish."
+            exit 1
+          fi
+
+          echo "Confirmed SNAPSHOT versions for both modules"
+
+      - name: Publish SNAPSHOT
+        run: ./gradlew :publishToMavenCentral :qilletni-api:publishToMavenCentral
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}

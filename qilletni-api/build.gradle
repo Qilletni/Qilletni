@@ -9,3 +9,33 @@ version = '1.0.0-SNAPSHOT'
 dependencies {
     implementation 'org.jetbrains:annotations:24.0.1'
 }
+
+mavenPublishing {
+    coordinates(group, "qilletni-api", version)
+
+    pom {
+        name = "qilletni-api"
+        description = "Implementation of the Qilletni DSL"
+        inceptionYear = "2024"
+        url = "https://qilletni.dev/"
+        licenses {
+            license {
+                name = "MIT"
+                url = "https://mit-license.org/"
+                distribution = "https://mit-license.org/"
+            }
+        }
+        developers {
+            developer {
+                id = "RubbaBoy"
+                name = "Adam Yarris"
+                url = "https://github.com/RubbaBoy/"
+            }
+        }
+        scm {
+            url = "https://github.com/Qilletni/Qilletni/tree/master/qilletni-api"
+            connection = "scm:git:git://github.com/Qilletni/Qilletni.git"
+            developerConnection = "scm:git:ssh://git@github.com/Qilletni/Qilletni.git"
+        }
+    }
+}
