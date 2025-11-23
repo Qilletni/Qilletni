@@ -11,8 +11,8 @@ import java.util.List;
  * @param dependencies
  * @param providerClass
  */
-public record QllInfo(String name, Version version, String author, String description, String sourceUrl, List<QilletniInfoData.Dependency> dependencies, String providerClass, String nativeBindFactoryClass, List<String> nativeClasses, List<String> autoImportFiles) {
+public record QllInfo(String scope, String name, Version version, String author, String description, String sourceUrl, List<QilletniInfoData.Dependency> dependencies, String providerClass, String nativeBindFactoryClass, String musicStrategies, List<String> nativeClasses, List<String> autoImportFiles) {
     public QllInfo(QilletniInfoData qilletniInfoData) {
-        this(qilletniInfoData.name(), qilletniInfoData.version(), qilletniInfoData.author(), qilletniInfoData.description(), qilletniInfoData.sourceUrl(), qilletniInfoData.dependencies(), qilletniInfoData.providerClass(), qilletniInfoData.nativeBindFactoryClass(), qilletniInfoData.nativeClasses(), qilletniInfoData.autoImportFiles());
+        this(qilletniInfoData.scope(), qilletniInfoData.name(), qilletniInfoData.version(), qilletniInfoData.author(), qilletniInfoData.description(), qilletniInfoData.sourceUrl(), qilletniInfoData.dependencies(), qilletniInfoData.providerClass(), qilletniInfoData.nativeBindFactoryClass(), qilletniInfoData.musicStrategies(), qilletniInfoData.nativeClasses(), qilletniInfoData.autoImportFiles());
     }
 }

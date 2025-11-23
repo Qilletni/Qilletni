@@ -18,8 +18,8 @@ public class ComparableVersion extends Version implements Comparable<ComparableV
      * @param patch The patch version
      * @param rangeSpecifier The range specifier for the version
      */
-    public ComparableVersion(int major, int minor, int patch, RangeSpecifier rangeSpecifier) {
-        super(major, minor, patch);
+    public ComparableVersion(int major, int minor, int patch, boolean snapshot, RangeSpecifier rangeSpecifier) {
+        super(major, minor, patch, snapshot);
         this.rangeSpecifier = rangeSpecifier;
     }
 
@@ -30,7 +30,7 @@ public class ComparableVersion extends Version implements Comparable<ComparableV
      * @param rangeSpecifier The range specifier for the version
      */
     public ComparableVersion(Version version, RangeSpecifier rangeSpecifier) {
-        this(version.major(), version.minor(), version.patch(), rangeSpecifier);
+        this(version.major(), version.minor(), version.patch(), version.isSnapshot(), rangeSpecifier);
     }
 
     /**
@@ -51,15 +51,24 @@ public class ComparableVersion extends Version implements Comparable<ComparableV
         if (rangeSpecifierOptional.isPresent()) {
             versionString = versionString.substring(1);
         }
-        
+
         return Version.parseVersionString(versionString)
                 .map(version -> new ComparableVersion(version, rangeSpecifier));
     }
 
     /**
+     * Gets the range specifier for this version.
+     *
+     * @return The range specifier
+     */
+    public RangeSpecifier getRangeSpecifier() {
+        return rangeSpecifier;
+    }
+
+    /**
      * Checks if the current {@link ComparableVersion} permits the given {@link Version} to be used in the current
      * range.
-     * 
+     *
      * @param checkVersion The version to compare
      * @return If the version fits the bounds of the current {@link RangeSpecifier}
      */
@@ -132,6 +141,10 @@ public class ComparableVersion extends Version implements Comparable<ComparableV
 
         RangeSpecifier(char specifier) {
             this.specifier = specifier;
+        }
+
+        public char getSpecifier() {
+            return specifier;
         }
 
         public static Optional<RangeSpecifier> getRangeSpecifierFromString(char specifierChar) {

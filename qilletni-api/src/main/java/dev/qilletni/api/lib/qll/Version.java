@@ -11,18 +11,21 @@ public class Version {
     private final int major;
     private final int minor;
     private final int patch;
+    private final boolean snapshot;
 
     /**
      * Creates a new {@link Version} with the given major, minor, and patch versions.
-     * 
-     * @param major The major version
-     * @param minor The minor version
-     * @param patch The patch version
+     *
+     * @param major    The major version
+     * @param minor    The minor version
+     * @param patch    The patch version
+     * @param snapshot If the version is a snapshot
      */
-    public Version(int major, int minor, int patch) {
+    public Version(int major, int minor, int patch, boolean snapshot) {
         this.major = major;
         this.minor = minor;
         this.patch = patch;
+        this.snapshot = snapshot;
     }
 
     /**
@@ -37,8 +40,14 @@ public class Version {
         if (versionSplit.length != 3) {
             return Optional.empty();
         }
+
+        var minorNumber = versionSplit[2];
+        var snapshotVersion = minorNumber.endsWith("-SNAPSHOT");
+        if (snapshotVersion) {
+            minorNumber =  minorNumber.substring(0, minorNumber.length() - "-SNAPSHOT".length());
+        }
         
-        return Optional.of(new Version(Integer.parseInt(versionSplit[0]), Integer.parseInt(versionSplit[1]), Integer.parseInt(versionSplit[2])));
+        return Optional.of(new Version(Integer.parseInt(versionSplit[0]), Integer.parseInt(versionSplit[1]), Integer.parseInt(minorNumber), snapshotVersion));
     }
 
     /**
@@ -68,13 +77,17 @@ public class Version {
         return patch;
     }
 
+    public boolean isSnapshot() {
+        return snapshot;
+    }
+
     /**
      * Gets the version string of the {@link Version}, such as {@code 1.0.0}.
      * 
      * @return The version string
      */
     public String getVersionString() {
-        return "%d.%d.%d".formatted(major, minor, patch);
+        return "%d.%d.%d%s".formatted(major, minor, patch, snapshot ? "-SNAPSHOT" : "");
     }
 
     @Override
@@ -84,12 +97,13 @@ public class Version {
         var that = (Version) obj;
         return this.major == that.major &&
                 this.minor == that.minor &&
-                this.patch == that.patch;
+                this.patch == that.patch &&
+                this.snapshot == that.snapshot;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(major, minor, patch);
+        return Objects.hash(major, minor, patch, snapshot);
     }
 
     @Override
@@ -97,7 +111,9 @@ public class Version {
         return "Version[" +
                 "major=" + major + ", " +
                 "minor=" + minor + ", " +
-                "patch=" + patch + ']';
+                "patch=" + patch + ", " +
+                "snapshot=" + snapshot +
+                ']';
     }
 
 }
