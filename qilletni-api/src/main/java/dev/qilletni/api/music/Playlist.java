@@ -42,7 +42,7 @@ public interface Playlist {
      * If the playlist was created with a pre-populated set of songs, a list of contained tracks are returned.
      * Otherwise, an empty optional will be returned, and it should be fetched via the implementation-specific way. 
      * 
-     * @return An optional containing pre-populated tracks, if no additional work should be done to fetch tracks
+     * @return An optional containing pre-populated tracks, if no additional work should be done to search tracks
      */
     default Optional<List<Track>> getTracks() {
         return Optional.empty();

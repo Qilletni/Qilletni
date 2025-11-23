@@ -1,6 +1,7 @@
 package dev.qilletni.api.auth;
 
 import dev.qilletni.api.lib.persistence.PackageConfig;
+import dev.qilletni.api.music.strategies.MusicStrategies;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.api.music.MusicCache;
 import dev.qilletni.api.music.MusicFetcher;
@@ -67,6 +68,13 @@ public interface ServiceProvider {
      * @return The created {@link TrackOrchestrator}
      */
     TrackOrchestrator getTrackOrchestrator();
+
+    /**
+     * Gets the {@link TrackOrchestrator} created after initialization.
+     *
+     * @return The created {@link TrackOrchestrator}
+     */
+    MusicStrategies<?, ?> getMusicStrategies();
 
     /**
      * Gets the {@link MusicTypeConverter} created after initialization.

@@ -10,6 +10,7 @@ import dev.qilletni.api.music.factories.AlbumTypeFactory;
 import dev.qilletni.api.music.factories.CollectionTypeFactory;
 import dev.qilletni.api.music.factories.SongTypeFactory;
 import dev.qilletni.api.music.play.PlayActor;
+import dev.qilletni.api.music.strategies.MusicStrategies;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lang.exceptions.InvalidProviderException;
 import org.slf4j.Logger;
@@ -100,6 +101,11 @@ public class DynamicProviderImpl implements DynamicProvider {
         }
         
         return currentProvider.getStringIdentifier(songTypeFactory, collectionTypeFactory, albumTypeFactory);
+    }
+
+    @Override
+    public MusicStrategies<?, ?> getMusicStrategies() {
+        return currentProvider.getMusicStrategies();
     }
 
     @Override

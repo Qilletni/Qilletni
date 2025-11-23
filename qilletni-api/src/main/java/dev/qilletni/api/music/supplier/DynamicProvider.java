@@ -10,6 +10,7 @@ import dev.qilletni.api.music.factories.CollectionTypeFactory;
 import dev.qilletni.api.music.factories.SongTypeFactory;
 import dev.qilletni.api.music.orchestration.TrackOrchestrator;
 import dev.qilletni.api.music.play.PlayActor;
+import dev.qilletni.api.music.strategies.MusicStrategies;
 
 /**
  * Represents a service provider that can be switched at runtime. It is important to pass around an instance of this
@@ -99,6 +100,13 @@ public interface DynamicProvider {
      * @return The current {@link StringIdentifier}
      */
     StringIdentifier getStringIdentifier();
+
+    /**
+     * Gets the music strategies for the current service provider.
+     *
+     * @return The current {@link MusicStrategies}
+     */
+    MusicStrategies<?, ?> getMusicStrategies();
 
     /**
      * Gets the {@link PlayActor} used by the current service provider. Do not keep a reference to this object that may

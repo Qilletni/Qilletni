@@ -31,5 +31,7 @@ module qilletni.api {
     exports dev.qilletni.api.exceptions;
     exports dev.qilletni.api.exceptions.config;
     exports dev.qilletni.api.music.play;
+    exports dev.qilletni.api.music.strategies;
+    exports dev.qilletni.api.music.strategies.search;
     exports dev.qilletni.api.music.orchestration;
 }
