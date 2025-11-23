@@ -1,5 +1,18 @@
+plugins {
+    id 'com.gradle.develocity' version '4.2.2'
+}
+
 rootProject.name = 'qilletni'
 include 'qilletni-api'
 include 'qilletni-spotify'
 include 'qilletni-provider-demo'
 include 'qilletni-lib-std'
+
+develocity {
+    buildScan {
+        termsOfUseUrl = "https://gradle.com/terms-of-service"
+        termsOfUseAgree = "yes"
+        var isCI = providers.environmentVariable("CI").isPresent()
+        publishing.onlyIf { isCI }
+    }
+}
