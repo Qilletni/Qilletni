@@ -1,4 +1,4 @@
-name: spotify
+name: qilletni/spotify
 version: 1.0.0
 author: Adam Yarris
 description: A service provider and library for Spotify, allowing for recommendations, playlist modifications, and user actions.
