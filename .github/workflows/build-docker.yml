@@ -111,6 +111,7 @@ jobs:
           push: true
           tags: ${{ steps.meta_snapshot.outputs.tags }}
           labels: ${{ steps.meta_snapshot.outputs.labels }}
+          no-cache: 'true'
           build-args: |
             SNAPSHOT=true
           cache-from: type=gha
@@ -124,5 +125,6 @@ jobs:
           push: true
           tags: ${{ steps.meta_release.outputs.tags }}
           labels: ${{ steps.meta_release.outputs.labels }}
+          no-cache: 'true'
           cache-from: type=gha
           cache-to: type=gha,mode=max
