@@ -17,7 +17,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: "Qilletni"
+  IMAGE_NAME: "qilletni/qilletni"
 
 jobs:
   validate:
