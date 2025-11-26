@@ -10,5 +10,18 @@ services:
       POSTGRES_DB: qilletni
     volumes:
       - qilletni-database:/var/lib/postgresql/data
+
+  qilletni:
+    build:
+      context: docker/
+    depends_on:
+      - qilletni-db
+    volumes:
+      - .:/workspace
+      - qilletni-packages:/root/.qilletni/packages
+    profiles:
+      - cli
+
 volumes:
   qilletni-database:
+  qilletni-packages:

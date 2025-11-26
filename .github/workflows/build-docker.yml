@@ -1,0 +1,128 @@
+name: Build and Publish Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - snapshot
+          - release
+      version:
+        description: 'Version (required for release, e.g., 1.0.0)'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: "Qilletni"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    outputs:
+      version: ${{ steps.set_version.outputs.version }}
+      is_snapshot: ${{ inputs.release_type == 'snapshot' }}
+    steps:
+      - name: Validate release input
+        if: inputs.release_type == 'release'
+        run: |
+          if [[ -z "${{ inputs.version }}" ]]; then
+            echo "Error: Version is required for release"
+            exit 1
+          fi
+
+      - name: Get snapshot version from commit SHAs
+        id: snapshot_version
+        if: inputs.release_type == 'snapshot'
+        run: |
+          TOOLCHAIN_SHA=$(curl -sf https://api.github.com/repos/Qilletni/QilletniToolchain/git/ref/tags/snapshot | jq -r '.object.sha[:7]')
+          if [[ -z "$TOOLCHAIN_SHA" || "$TOOLCHAIN_SHA" == "null" ]]; then
+            echo "Error: Failed to fetch QilletniToolchain snapshot tag"
+            exit 1
+          fi
+
+          QPM_SHA=$(curl -sf https://api.github.com/repos/Qilletni/QPMCLI/git/ref/tags/snapshot | jq -r '.object.sha[:7]')
+          if [[ -z "$QPM_SHA" || "$QPM_SHA" == "null" ]]; then
+            echo "Error: Failed to fetch QPMCLI snapshot tag"
+            exit 1
+          fi
+
+          echo "version=${TOOLCHAIN_SHA}-${QPM_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set version output
+        id: set_version
+        run: |
+          if [[ "${{ inputs.release_type }}" == "snapshot" ]]; then
+            echo "version=${{ steps.snapshot_version.outputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (snapshot)
+        id: meta_snapshot
+        if: needs.validate.outputs.is_snapshot == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=snapshot
+            type=raw,value=${{ needs.validate.outputs.version }}
+
+      - name: Extract metadata (release)
+        id: meta_release
+        if: needs.validate.outputs.is_snapshot == 'false'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.validate.outputs.version }}
+
+      - name: Build and push Docker image (snapshot)
+        if: needs.validate.outputs.is_snapshot == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta_snapshot.outputs.tags }}
+          labels: ${{ steps.meta_snapshot.outputs.labels }}
+          build-args: |
+            SNAPSHOT=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Docker image (release)
+        if: needs.validate.outputs.is_snapshot == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta_release.outputs.tags }}
+          labels: ${{ steps.meta_release.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
