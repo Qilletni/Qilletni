@@ -20,4 +20,6 @@ RUN set -x && \
 
 ENV PATH="/root/.qilletni/bin:${PATH}"
 
+RUN chmod -R 755 /root/.qilletni/bin
+
 WORKDIR /workspace

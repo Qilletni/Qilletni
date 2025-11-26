@@ -30,6 +30,8 @@ url=$(curl -s https://api.github.com/repos/Qilletni/QilletniToolchain/releases/t
 curl -L "$url" -o /tmp/qpm.tar.gz
 tar -xzf /tmp/qpm.tar.gz -C "$INSTALL_DIR" && rm /tmp/qpm.tar.gz
 
+chmod -R 755 "$INSTALL_DIR/bin"
+
 if ! grep -q 'export PATH="$HOME/.qilletni/bin:$PATH"' "$HOME/.bashrc"; then
   echo 'export PATH="$HOME/.qilletni/bin:$PATH"' >> "$HOME/.bashrc"
 fi
