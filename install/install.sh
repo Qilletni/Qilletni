@@ -9,8 +9,8 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-INSTALL_DIR="$HOME/.qilletni"
-mkdir -p "$INSTALL_DIR/bin"
+INSTALL_DIR="$HOME/.qilletni/bin"
+mkdir -p "$INSTALL_DIR"
 
 if [ -n "$USE_SNAPSHOT" ]; then
   TOOLCHAIN_VERSION="snapshot"
@@ -26,17 +26,17 @@ curl -L "$url" -o /tmp/qilletni.tar.gz
 tar -xzf /tmp/qilletni.tar.gz -C "$INSTALL_DIR" && rm /tmp/qilletni.tar.gz
 
 # Install QPM
-url=$(curl -s https://api.github.com/repos/Qilletni/QilletniToolchain/releases/tags/${QPM_VERSION} | grep "browser_download_url.*tar.gz" | cut -d'"' -f4)
+url=$(curl -s https://api.github.com/repos/Qilletni/QPMCLI/releases/tags/${QPM_VERSION} | grep "browser_download_url.*tar.gz" | cut -d'"' -f4)
 curl -L "$url" -o /tmp/qpm.tar.gz
 tar -xzf /tmp/qpm.tar.gz -C "$INSTALL_DIR" && rm /tmp/qpm.tar.gz
 
-chmod -R 755 "$INSTALL_DIR/bin"
+chmod -R 755 "$INSTALL_DIR"
 
 if ! grep -q 'export PATH="$HOME/.qilletni/bin:$PATH"' "$HOME/.bashrc"; then
   echo 'export PATH="$HOME/.qilletni/bin:$PATH"' >> "$HOME/.bashrc"
 fi
 
-export PATH="$HOME/.qilletni:$PATH"
+export PATH="$INSTALL_DIR:$PATH"
 
 echo "Installed Qilletni, please reload your terminal or run 'source ~/.bashrc'"
 echo "Verify install with:"
