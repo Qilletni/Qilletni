@@ -1,6 +1,6 @@
 # Change Log
 
-## [UNRELEASED](#) *(2025-23-11)*
+## [UNRELEASED](#) *(11-25-2025)*
 
 - Published to maven central with CI/CD
 - Added new install script

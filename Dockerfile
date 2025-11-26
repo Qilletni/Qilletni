@@ -11,15 +11,15 @@ RUN mkdir -p /root/.qilletni/bin
 RUN set -x && \
     EFFECTIVE_VERSION=$(if [ "$SNAPSHOT" = "true" ]; then echo "snapshot"; else echo "$TOOLCHAIN_VERSION"; fi) && \
     curl -L "$(curl -s https://api.github.com/repos/Qilletni/QilletniToolchain/releases/tags/${EFFECTIVE_VERSION} | grep 'browser_download_url.*tar.gz' | cut -d'"' -f4)" \
-    | tar -xzf - -C /root/.qilletni
+    | tar -xzf - -C /root/.qilletni/bin
 
 RUN set -x && \
     EFFECTIVE_VERSION=$(if [ "$SNAPSHOT" = "true" ]; then echo "snapshot"; else echo "$QPM_VERSION"; fi) && \
     curl -L "$(curl -s https://api.github.com/repos/Qilletni/QPMCLI/releases/tags/${EFFECTIVE_VERSION} | grep 'browser_download_url.*tar.gz' | cut -d'"' -f4)" \
-    | tar -xzf - -C /root/.qilletni
-
-ENV PATH="/root/.qilletni/bin:${PATH}"
+    | tar -xzf - -C /root/.qilletni/bin
 
 RUN chmod -R 755 /root/.qilletni/bin
+
+ENV PATH="/root/.qilletni/bin:${PATH}"
 
 WORKDIR /workspace
