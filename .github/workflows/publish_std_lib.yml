@@ -1,0 +1,24 @@
+on:
+  push:
+    tags:
+      - 'std-v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/qilletni/qilletni:snapshot
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build Package
+        run: qilletni build
+        working-directory: qilletni-lib-std
+
+      - name: QPM Publish
+        run: qpm publish
+        working-directory: qilletni-lib-std
+        env:
+          QPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
