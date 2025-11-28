@@ -1,3 +1,5 @@
+name: Publish qilletni/spotify
+
 on:
   workflow_dispatch: # For snapshot versions
   push:

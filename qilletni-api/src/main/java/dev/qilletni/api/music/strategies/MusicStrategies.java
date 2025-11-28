@@ -3,14 +3,26 @@ package dev.qilletni.api.music.strategies;
 import dev.qilletni.api.music.strategies.search.SearchResolveStrategy;
 import dev.qilletni.api.music.strategies.search.SearchResolveStrategyFactory;
 
+import java.util.Optional;
+
 /**
  * Implemented by libraries to store strategies.
  */
 public interface MusicStrategies<SIn, SOut> {
 
-    SearchResolveStrategyProvider<SIn, SOut> getSearchResolveStrategyProvider();
+    /**
+     * Gets the strategy provider for {@link SearchResolveStrategy}, which manages the provider.
+     *
+     * @return The strategy provider
+     */
+    Optional<SearchResolveStrategyProvider<SIn, SOut>> getSearchResolveStrategyProvider();
 
-
+    /**
+     * An interface to manage the {@link SearchResolveStrategy}.
+     *
+     * @param <I> The input type for the provider
+     * @param <O> The output type for the provider
+     */
     interface SearchResolveStrategyProvider<I, O> {
         /**
          * Gets the search resolve strategy factory for the service provider. With this, new strategies can be registered.

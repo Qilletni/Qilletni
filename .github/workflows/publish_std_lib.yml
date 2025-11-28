@@ -1,3 +1,5 @@
+name: Publish qilletni/std
+
 on:
   push:
     tags:

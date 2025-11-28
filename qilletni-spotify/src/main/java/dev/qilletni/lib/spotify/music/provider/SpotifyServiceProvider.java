@@ -13,6 +13,7 @@ import dev.qilletni.api.music.factories.SongTypeFactory;
 import dev.qilletni.api.music.orchestration.TrackOrchestrator;
 import dev.qilletni.api.music.play.DefaultRoutablePlayActor;
 import dev.qilletni.api.music.play.PlayActor;
+import dev.qilletni.api.music.strategies.MusicStrategies;
 import dev.qilletni.lib.spotify.async.ExecutorServiceUtility;
 import dev.qilletni.lib.spotify.database.HibernateUtil;
 import dev.qilletni.lib.spotify.music.QueuePlayActor;
@@ -24,6 +25,7 @@ import dev.qilletni.lib.spotify.music.auth.SpotifyApiSingleton;
 import dev.qilletni.lib.spotify.music.auth.SpotifyAuthorizer;
 import dev.qilletni.lib.spotify.music.auth.pkce.SpotifyPKCEAuthorizer;
 import dev.qilletni.lib.spotify.music.creator.PlaylistCreator;
+import dev.qilletni.lib.spotify.music.strategies.SpotifyMusicStrategies;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +45,7 @@ public class SpotifyServiceProvider implements ServiceProvider {
     private MusicTypeConverter musicTypeConverter;
     private StringIdentifier stringIdentifier;
     private SpotifyAuthorizer authorizer;
+    private SpotifyMusicStrategies musicStrategies;
     private PlayActor playActor;
     
     private static ServiceProvider serviceProviderInstance;
@@ -64,6 +67,7 @@ public class SpotifyServiceProvider implements ServiceProvider {
             trackOrchestrator = defaultTrackOrchestratorFunction.apply(playActor, musicCache);
 
             musicTypeConverter = new SpotifyMusicTypeConverter(musicCache);
+            musicStrategies = new SpotifyMusicStrategies();
             
             serviceProviderInstance = this;
         });
@@ -93,6 +97,11 @@ public class SpotifyServiceProvider implements ServiceProvider {
     @Override
     public TrackOrchestrator getTrackOrchestrator() {
         return Objects.requireNonNull(trackOrchestrator, "ServiceProvider#initialize must be invoked to initialize TrackOrchestrator");
+    }
+
+    @Override
+    public MusicStrategies<?, ?> getMusicStrategies() {
+        return Objects.requireNonNull(musicStrategies, "ServiceProvider#initialize must be invoked to initialize MusicStrategies");
     }
 
     @Override
