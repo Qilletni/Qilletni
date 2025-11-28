@@ -10,6 +10,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 INSTALL_DIR="$HOME/.qilletni/bin"
+rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
 if [ -n "$USE_SNAPSHOT" ]; then
