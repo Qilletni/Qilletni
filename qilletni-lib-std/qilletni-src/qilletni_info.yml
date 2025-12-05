@@ -1,5 +1,5 @@
 name: qilletni/std
-version: 1.0.0
+version: 1.0.0-SNAPSHOT
 author: Adam Yarris
 description: The standard library for the Qilletni language
 source_url: https://github.com/RubbaBoy/Qilletni/tree/master/qilletni-lib-std

@@ -12,6 +12,6 @@ import java.util.List;
  */
 public record QilletniInfoData(String scope, String name, Version version, String author, String description, String sourceUrl, String providerClass, String nativeBindFactoryClass, List<String> nativeClasses, List<String> autoImportFiles, List<Dependency> dependencies) {
     
-    public record Dependency(String name, ComparableVersion version) {}
+    public record Dependency(String scope, String name, ComparableVersion version) {}
     
 }

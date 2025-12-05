@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: qilletni
     volumes:
-      - qilletni-database:/var/lib/postgresql/data
+      - qilletni-database:/var/lib/postgresql
 
   qilletni:
     build:

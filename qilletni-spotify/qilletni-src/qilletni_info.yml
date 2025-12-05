@@ -11,4 +11,4 @@ native_classes:
   - dev.qilletni.lib.spotify.PlaylistToolsFunctions
   - dev.qilletni.lib.spotify.RecommendationsFunctions
 dependencies:
-  qilletni/postgres: ^1.0.0
+  qilletni/postgres: 1.0.0-SNAPSHOT

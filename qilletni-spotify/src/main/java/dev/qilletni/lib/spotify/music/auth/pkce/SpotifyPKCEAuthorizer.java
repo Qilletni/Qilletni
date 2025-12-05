@@ -23,6 +23,7 @@ import se.michaelthelin.spotify.model_objects.specification.User;
 
 import java.awt.Desktop;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -43,6 +44,7 @@ public class SpotifyPKCEAuthorizer implements SpotifyAuthorizer {
     private final String codeChallenge;
     private final String codeVerifier;
     private final ExecutorService executorService;
+    private final URI redirectUri;
     
     private se.michaelthelin.spotify.model_objects.specification.User currentUser;
 
@@ -51,10 +53,11 @@ public class SpotifyPKCEAuthorizer implements SpotifyAuthorizer {
         this.codeChallenge = codeChallenge;
         this.codeVerifier = codeVerifier;
         this.executorService = Executors.newCachedThreadPool();
+        this.redirectUri = SpotifyHttpManager.makeUri(redirectUri);
 
         spotifyApi = new SpotifyApi.Builder()
                 .setClientId(clientId)
-                .setRedirectUri(SpotifyHttpManager.makeUri(redirectUri))
+                .setRedirectUri(this.redirectUri)
                 .build();
     }
 
@@ -164,11 +167,14 @@ public class SpotifyPKCEAuthorizer implements SpotifyAuthorizer {
      * @throws Exception
      */
     private Server setupCallbackServer(CompletableFuture<String> codeFuture) throws Exception {
-        var server = new Server(8088); // Set your desired port
+        var callbackPort = redirectUri.getPort();
+        var contextPath = redirectUri.getPath();
+
+        var server = new Server(callbackPort); // Set your desired port
         server.setHandler(new Handler.Abstract() {
             @Override
             public boolean handle(Request request, Response response, Callback callback) throws Exception {
-                if (!request.getHttpURI().getPath().equals("/spotify")) {
+                if (!request.getHttpURI().getPath().equals(contextPath)) {
                     return false;
                 }
 
