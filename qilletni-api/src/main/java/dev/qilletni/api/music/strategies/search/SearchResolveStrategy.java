@@ -30,6 +30,15 @@ public interface SearchResolveStrategy<T, O> {
     O resolveTrack(T tracks, String title, String artist);
 
     /**
+     * When a track is resolved, if this is true, the name and artist looked up will be cached and associated with the
+     * resolved track. This may not be supported by all service providers.
+     * This is intended to be used by more resource-intensive strategies, such as a fuzzy cache that does many API calls.
+     *
+     * @return If the track name and artist can be cached
+     */
+    boolean isCacheable();
+
+    /**
      * Gets the type of the track, for type checking during registration.
      *
      * @return The class of the track type
