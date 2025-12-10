@@ -1,4 +1,4 @@
-FROM eclipse-temurin:24-jre
+FROM eclipse-temurin:24-jdk
 
 ARG SNAPSHOT=false
 ARG TOOLCHAIN_VERSION=v1.0.0
