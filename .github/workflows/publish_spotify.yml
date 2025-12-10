@@ -25,7 +25,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build Package
-        run: qilletni build -v
+        run: qilletni -DTOOLCHAIN_LOG_LEVEL=DEBUG -DQL_LOG_LEVEL=DEBUG build -v
         working-directory: qilletni-spotify
 
       - name: QPM Publish
