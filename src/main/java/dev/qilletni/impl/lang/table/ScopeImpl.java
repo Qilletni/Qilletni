@@ -84,19 +84,6 @@ public class ScopeImpl implements Scope {
             checkParentForVar = parent != null;
         }
 
-//        if (name.startsWith("_")) {
-//            if (parent != null) {
-//                checkParentForVar = parent.getScopeType() != ScopeType.GLOBAL && parent.isDefined(name);
-//            } else {
-//                checkParentForVar = false;
-//            }
-//        } else {
-//            checkParentForVar = parent != null;
-//        }
-//
-//        var checkParentForVar = !name.startsWith("_") || 
-//                (parent != null && parent.getScopeType() != ScopeType.GLOBAL && parent.isDefined(name));
-        
         LOGGER.debug("checkParentForVar: {}", checkParentForVar);
 //        LOGGER.debug("var {} checking parent? {} parent = {}", name, checkParentForVar, parent.getAllSymbols().keySet());
         LOGGER.debug("in this: {}", this);

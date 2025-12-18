@@ -1649,13 +1649,20 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         if (ctx.COLLECTION_TYPE() != null) {
             ListType songList;
             if (ctx.ID() != null) { // Is a list reference
-                songList = visitQilletniTypedNode(ctx.ID(), ListTypeImpl.class);
+                var scope = symbolTable.currentScope();
+                songList = TypeUtils.safelyCast(scope.lookup(ctx.ID().getText()).getValue(), QilletniTypeClass.LIST);
+
                 if (!songList.getSubType().equals(QilletniTypeClass.SONG)) {
-                    throw new TypeMismatchException("Expected a song list, got a %s".formatted(songList.getSubType()));
+                    throw new TypeMismatchException("Expected a song list, got a %s[]".formatted(songList.getSubType()));
                 }
             } else {
                 songList = createListOfType(ctx.list_expression(), QilletniTypeClass.SONG);
             }
+
+            // Ensure songs are populated before getting their tracks
+            songList.getItems().stream()
+                    .map(SongType.class::cast)
+                    .forEach(musicPopulator::populateSong);
 
             collectionType = new CollectionTypeImpl(dynamicProvider, songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList());
         } else {

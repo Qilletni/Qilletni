@@ -13,7 +13,7 @@ public class TableUtils {
     
     public static void requireSymbolNotNull(Symbol<?> symbol, String name) {
         if (symbol == null) {
-            throw new VariableNotFoundException("Symbol " + name + " not found!");
+            throw new VariableNotFoundException("Symbol %s not found!".formatted(name));
         }
     }
     
@@ -22,7 +22,7 @@ public class TableUtils {
         var type2 = qilletniType.getTypeClass();
         LOGGER.debug("{} == {}", type1, type2);
         if (!type1.isAssignableFrom(type2)) {
-            throw new TypeMismatchException("Mismatching types: " + type1.getTypeName() + " and " + type2.getTypeName());
+            throw new TypeMismatchException("Mismatching types: %s and %s".formatted(type1.getTypeName(), type2.getTypeName()));
         }
     }
     

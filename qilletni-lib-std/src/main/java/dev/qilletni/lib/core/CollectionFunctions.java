@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @NativeOn("collection")
 public class CollectionFunctions {
@@ -75,6 +76,16 @@ public class CollectionFunctions {
 
     public int getTrackCount(CollectionType collectionType) {
         return collectionType.getPlaylist().getTrackCount();
+    }
+
+    public String toVerboseString(CollectionType collectionType) {
+        var tracks = musicCache.getPlaylistTracks(collectionType.getPlaylist());
+
+        var songString = tracks.stream()
+                .map(track -> "\"%s\" by \"%s\"".formatted(track.getName(), track.getArtist().getName()))
+                .collect(Collectors.joining(", "));
+
+        return "collection(%s)".formatted(songString);
     }
 
     public boolean anySongMatches(CollectionType collectionType, FunctionType functionType) {

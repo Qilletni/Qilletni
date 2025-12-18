@@ -34,6 +34,14 @@ native fun getCreator() on collection
 native fun getTrackCount() on collection
 
 /**
+ * Returns a string value including all the songs in the collection appended together in a string.
+ * For instance, this will return `collection("Lost in Echoes" by "Caskets", "Cremation Party" by "Ithaca")`
+ *
+ * @returns[@type string] The string representation of the collection
+ */
+native fun toVerboseString() on collection
+
+/**
  * Loops through all songs of the collection and checks if the condition is matched.
  *
  * @param fn The function to check if the condition is matched. A single parameter `song` is passed into the function.
