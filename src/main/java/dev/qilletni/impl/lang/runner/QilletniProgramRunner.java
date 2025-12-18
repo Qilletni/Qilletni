@@ -71,10 +71,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 public class QilletniProgramRunner {
 
@@ -95,6 +92,9 @@ public class QilletniProgramRunner {
     private final LibraryRegistrar libraryRegistrar;
     private final BackgroundTaskExecutorImpl backgroundTaskExecutor;
     private final QilletniStackTrace qilletniStackTrace;
+
+    // Import cache to avoid importing the same file multiple times
+    private final Set<ImportPathState> importCache = new HashSet<>();
 
     public QilletniProgramRunner(DynamicProvider dynamicProvider, LibrarySourceFileResolver librarySourceFileResolver, List<QllInfo> loadedQllInfos) {
         internalPackageConfig.loadConfig();
@@ -281,12 +281,20 @@ public class QilletniProgramRunner {
 
     private Optional<ImportAliasType> importFileFromStream(ImportPathState pathState, String importAs, Scope global) {
         try {
+            if (importAs == null && importCache.contains(pathState)) {
+                LOGGER.debug("Skipping import for {}:{}", pathState.libraryName(), pathState.path());
+                // Already imported file, no alias needed
+                return Optional.empty();
+            }
+
             if (importAs != null) {
                 LOGGER.debug("global override parent for ({}) = {}", pathState.path(), globalScope);
                 global = new ScopeImpl(globalScope, Scope.ScopeType.ALIASED_GLOBAL, "FG " + pathState.path());
             }
 
             var symbolTable = runProgram(libraryRegistrar.findLibraryByPath(pathState.libraryName(), pathState.path()).orElseThrow(FileNotFoundException::new), pathState, global);
+
+            importCache.add(pathState);
 
             if (importAs != null) {
                 LOGGER.debug("Creating import alias '{}' for: {}", importAs, symbolTable.currentScope());
