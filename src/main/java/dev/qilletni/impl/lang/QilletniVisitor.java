@@ -1647,7 +1647,16 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         CollectionType collectionType;
         
         if (ctx.COLLECTION_TYPE() != null) {
-            var songList = createListOfType(ctx.list_expression(), QilletniTypeClass.SONG);
+            ListType songList;
+            if (ctx.ID() != null) { // Is a list reference
+                songList = visitQilletniTypedNode(ctx.ID(), ListTypeImpl.class);
+                if (!songList.getSubType().equals(QilletniTypeClass.SONG)) {
+                    throw new TypeMismatchException("Expected a song list, got a %s".formatted(songList.getSubType()));
+                }
+            } else {
+                songList = createListOfType(ctx.list_expression(), QilletniTypeClass.SONG);
+            }
+
             collectionType = new CollectionTypeImpl(dynamicProvider, songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList());
         } else {
             var urlOrName = ctx.collection_url_or_name_pair();
