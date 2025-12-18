@@ -13,6 +13,7 @@ import dev.qilletni.api.music.play.PlayActor;
 import dev.qilletni.api.music.strategies.MusicStrategies;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lang.exceptions.InvalidProviderException;
+import dev.qilletni.impl.lang.exceptions.music.NoServiceProviderLoadedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,8 @@ public class DynamicProviderImpl implements DynamicProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicProviderImpl.class);
     
     private final Map<String, ServiceProvider> providers = new HashMap<>();
-    
+
+    private boolean noServiceProviders = true;
     private ServiceProvider currentProvider;
     private SongTypeFactory songTypeFactory;
     private CollectionTypeFactory collectionTypeFactory;
@@ -32,6 +34,7 @@ public class DynamicProviderImpl implements DynamicProvider {
 
     @Override
     public void addServiceProvider(ServiceProvider serviceProvider) {
+        noServiceProviders = false;
         providers.put(serviceProvider.getName().toLowerCase(), serviceProvider);
     }
 
@@ -44,6 +47,11 @@ public class DynamicProviderImpl implements DynamicProvider {
 
     @Override
     public void initializeInitialProvider(PackageConfig packageConfig) {
+        if (noServiceProviders) {
+            LOGGER.warn("No service providers loaded");
+            return;
+        }
+
         var initialProviderName = packageConfig.get("initialProvider").orElse("spotify");
         
         if (providers.containsKey(initialProviderName)) {
@@ -64,6 +72,10 @@ public class DynamicProviderImpl implements DynamicProvider {
 
     @Override
     public ServiceProvider getCurrentProvider() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         return currentProvider;
     }
 
@@ -81,21 +93,37 @@ public class DynamicProviderImpl implements DynamicProvider {
 
     @Override
     public MusicCache getMusicCache() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         return currentProvider.getMusicCache();
     }
 
     @Override
     public MusicFetcher getMusicFetcher() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         return currentProvider.getMusicFetcher();
     }
 
     @Override
     public TrackOrchestrator getTrackOrchestrator() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         return currentProvider.getTrackOrchestrator();
     }
 
     @Override
     public StringIdentifier getStringIdentifier() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         if (songTypeFactory == null || collectionTypeFactory == null || albumTypeFactory == null) {
             throw new IllegalStateException("DynamicProvider#initFactories() must be invoked before getting a StringIdentifier");
         }
@@ -105,11 +133,19 @@ public class DynamicProviderImpl implements DynamicProvider {
 
     @Override
     public MusicStrategies<?, ?> getMusicStrategies() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         return currentProvider.getMusicStrategies();
     }
 
     @Override
     public PlayActor getPlayActor() {
+        if (noServiceProviders) {
+            throw new NoServiceProviderLoadedException();
+        }
+
         return currentProvider.getPlayActor();
     }
 }

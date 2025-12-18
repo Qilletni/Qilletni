@@ -23,10 +23,6 @@ public class ServiceManager {
                 .filter(Objects::nonNull)
                 .map(ServiceManager::loadServiceProviderClass)
                 .filter(Optional::isPresent).map(Optional::get).toList();
-
-        if (providers.isEmpty()) {
-            throw new RuntimeException("No service providers found!");
-        }
         
         var dynamicProvider = new DynamicProviderImpl();
         
