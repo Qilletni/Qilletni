@@ -1,17 +1,13 @@
 package dev.qilletni.lib.core;
 
 import dev.qilletni.api.lang.internal.FunctionInvoker;
-import dev.qilletni.api.lang.types.BooleanType;
-import dev.qilletni.api.lang.types.CollectionType;
-import dev.qilletni.api.lang.types.EntityType;
-import dev.qilletni.api.lang.types.FunctionType;
-import dev.qilletni.api.lang.types.SongType;
-import dev.qilletni.api.lang.types.StringType;
+import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lib.annotations.BeforeAnyInvocation;
 import dev.qilletni.api.lib.annotations.NativeOn;
 import dev.qilletni.api.music.MusicCache;
 import dev.qilletni.api.music.MusicPopulator;
+import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.factories.CollectionStateFactory;
 import dev.qilletni.api.music.factories.SongTypeFactory;
 import dev.qilletni.api.music.orchestration.CollectionState;
@@ -20,10 +16,7 @@ import dev.qilletni.api.music.supplier.DynamicProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @NativeOn("collection")
@@ -135,4 +128,7 @@ public class CollectionFunctions {
         return songTypeFactory.createSongFromTrack(trackOrchestrator.getTrackFromCollection(state));
     }
 
+    public List<Track> getSongs(CollectionType collectionType) {
+        return musicCache.getPlaylistTracks(collectionType.getPlaylist());
+    }
 }

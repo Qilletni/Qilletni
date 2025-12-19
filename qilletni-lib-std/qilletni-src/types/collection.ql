@@ -61,3 +61,10 @@ native fun containsArtist(artist) on collection
  * Gets the next song as if it were being played.
  */
 native fun nextSong() on collection
+
+/**
+ * Gets all songs from the sollection.
+ *
+ * @returns[@type list] A song list
+ */
+native fun getSongs() on collection
