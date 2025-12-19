@@ -3,6 +3,8 @@ package dev.qilletni.lib.core;
 import dev.qilletni.api.lang.internal.FunctionInvoker;
 import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
+import dev.qilletni.api.lang.types.list.ListInitializer;
+import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.lib.annotations.BeforeAnyInvocation;
 import dev.qilletni.api.lib.annotations.NativeOn;
 import dev.qilletni.api.music.MusicCache;
@@ -31,12 +33,13 @@ public class CollectionFunctions {
     private final MusicCache musicCache;
     private final TrackOrchestrator trackOrchestrator;
     private final CollectionStateFactory collectionStateFactory;
+    private final ListInitializer listInitializer;
 
     // TODO: Yeah this will probably (definitely) cause memory leaks
     //       Better fix this later or figure out a better way
     private static final Map<CollectionType, CollectionState> collectionStates = new HashMap<>();
 
-    public CollectionFunctions(MusicPopulator musicPopulator, EntityDefinitionManager entityDefinitionManager, FunctionInvoker functionInvoker, SongTypeFactory songTypeFactory, DynamicProvider dynamicProvider, CollectionStateFactory collectionStateFactory) {
+    public CollectionFunctions(MusicPopulator musicPopulator, EntityDefinitionManager entityDefinitionManager, FunctionInvoker functionInvoker, SongTypeFactory songTypeFactory, DynamicProvider dynamicProvider, CollectionStateFactory collectionStateFactory, ListInitializer listInitializer) {
         this.musicPopulator = musicPopulator;
         this.entityDefinitionManager = entityDefinitionManager;
         this.functionInvoker = functionInvoker;
@@ -44,6 +47,7 @@ public class CollectionFunctions {
         this.musicCache = dynamicProvider.getMusicCache();
         this.trackOrchestrator = dynamicProvider.getTrackOrchestrator();
         this.collectionStateFactory = collectionStateFactory;
+        this.listInitializer = listInitializer;
     }
 
     @BeforeAnyInvocation
@@ -128,7 +132,14 @@ public class CollectionFunctions {
         return songTypeFactory.createSongFromTrack(trackOrchestrator.getTrackFromCollection(state));
     }
 
-    public List<Track> getSongs(CollectionType collectionType) {
-        return musicCache.getPlaylistTracks(collectionType.getPlaylist());
+    public ListType getSongs(CollectionType collectionType) {
+        List<Track> playlistTracks = musicCache.getPlaylistTracks(collectionType.getPlaylist());
+
+        var recommendedSongs = playlistTracks.stream()
+                .map(songTypeFactory::createSongFromTrack)
+                .map(QilletniType.class::cast)
+                .toList();
+
+        return listInitializer.createList(recommendedSongs, QilletniTypeClass.SONG);
     }
 }
