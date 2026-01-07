@@ -968,9 +968,9 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         // Not an entity
         if (type.equals(QilletniTypeClass.LIST)) {
             if (ctx.type == null) {
-                throw new InvalidSyntaxException(ctx, "Required type for list type check");
+                return new BooleanTypeImpl(checkingVariable instanceof ListType);
             }
-            
+
             var subType = TypeUtils.getTypeFromStringOrEntity(ctx.type.getText());
 
             if (!(checkingVariable instanceof ListType listType)) {
