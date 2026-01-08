@@ -5,7 +5,7 @@
 <p align="center">
   <b>
     <a href="https://qilletni.dev/">Website</a> •
-    <a href="https://docs.qilletni.dev/">Language Docs</a> •
+    <a href="https://docs.qilletni.dev/">Package Docs</a> •
     <a href="https://api.qilletni.dev/">Native API Docs</a>
   </b>
 </p>
