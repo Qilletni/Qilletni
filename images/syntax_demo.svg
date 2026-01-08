@@ -1,0 +1,37 @@
+<!-- Generated with https://qilletni.dev/svg-gen.html -->
+<svg fill="none" viewBox="0 0 688 420" width="688" height="420" xmlns="http://www.w3.org/2000/svg">
+  <foreignObject width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+      <style>
+        :root { --bg: #161b22; --fg: #e6edf3; --kw: #ff7b72; --str: #a5d6ff; --cmt: #8b949e; --num: #79c0ff; }
+        @media (prefers-color-scheme: light) {
+          :root { --bg: #f6f8fa; --fg: #1f2328; --kw: #cf222e; --str: #0a3069; --cmt: #6e7781; --num: #0550ae; }
+        }
+        pre { background: var(--bg); color: var(--fg); border-radius: 6px; padding: 16px; margin: 0; font: 13.6px/1.45 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; white-space: pre; }
+        .k { color: var(--kw); }
+        .s { color: var(--str); }
+        .c { color: var(--cmt); }
+        .n { color: var(--num); }
+      </style>
+<pre><span class="k">fun</span> generateUniqueRecommendations(alreadyRecommended) {
+    Recommender recommender = <span class="k">new</span> Recommender()
+            ..seedTracks = [<span class="s">&quot;Truth Serum&quot;</span> <span class="k">by</span> <span class="s">&quot;Gutter King&quot;</span>,
+                            <span class="s">&quot;Spiral&quot;</span> <span class="k">by</span> <span class="s">&quot;Feyn Entity&quot;</span>]
+            ..targetEnergy = <span class="n">1</span>.<span class="n">0</span>
+            ..targetPopularity = <span class="n">10</span>
+
+    <span class="k">song</span>[] recs = recommender.recommend(<span class="n">100</span>)
+    Stack recommendations = <span class="k">new</span> Stack()
+
+    <span class="k">for</span> (rec : recs) {
+        <span class="k">if</span> (!alreadyRecommended.containsArtist(rec.getArtist())) {
+            recommendations.push(rec)
+        }
+    }
+
+    print(<span class="s">&quot;Generated %d unique recommendations&quot;</span>.format([recommendations.size()]))
+    <span class="k">return</span> recommendations
+}</pre>
+    </div>
+  </foreignObject>
+</svg>

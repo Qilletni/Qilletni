@@ -1,0 +1,23 @@
+<!-- Generated with https://qilletni.dev/svg-gen.html -->
+<svg fill="none" viewBox="0 0 520 140" width="520" height="140" xmlns="http://www.w3.org/2000/svg">
+  <foreignObject width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+      <style>
+        :root { --bg: #161b22; --fg: #e6edf3; --kw: #ff7b72; --str: #a5d6ff; --cmt: #8b949e; --num: #79c0ff; }
+        @media (prefers-color-scheme: light) {
+          :root { --bg: #f6f8fa; --fg: #1f2328; --kw: #cf222e; --str: #0a3069; --cmt: #6e7781; --num: #0550ae; }
+        }
+        pre { background: var(--bg); color: var(--fg); border-radius: 6px; padding: 16px; margin: 0; font: 13.6px/1.45 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; white-space: pre; }
+        .k { color: var(--kw); }
+        .s { color: var(--str); }
+        .c { color: var(--cmt); }
+        .n { color: var(--num); }
+      </style>
+<pre><span class="k">weights</span> demoWeights =
+    | <span class="n">25</span>% <span class="s">&quot;MANGO&quot;</span> <span class="k">by</span> <span class="s">&quot;This Is Falling&quot;</span>
+    | <span class="n">25</span>% <span class="s">&quot;Reflections&quot;</span> <span class="k">by</span> <span class="s">&quot;I Sworn&quot;</span>
+
+<span class="k">play</span> <span class="s">&quot;My Songs&quot;</span> <span class="k">by</span> <span class="s">&quot;SomeUser&quot;</span> <span class="k">limit</span>[<span class="n">20</span>] <span class="k">weights</span>[demoWeights]</pre>
+    </div>
+  </foreignObject>
+</svg>

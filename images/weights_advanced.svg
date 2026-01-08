@@ -1,0 +1,28 @@
+<!-- Generated with https://qilletni.dev/svg-gen.html -->
+<svg fill="none" viewBox="0 0 752 240" width="752" height="240" xmlns="http://www.w3.org/2000/svg">
+  <foreignObject width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+      <style>
+        :root { --bg: #161b22; --fg: #e6edf3; --kw: #ff7b72; --str: #a5d6ff; --cmt: #8b949e; --num: #79c0ff; }
+        @media (prefers-color-scheme: light) {
+          :root { --bg: #f6f8fa; --fg: #1f2328; --kw: #cf222e; --str: #0a3069; --cmt: #6e7781; --num: #0550ae; }
+        }
+        pre { background: var(--bg); color: var(--fg); border-radius: 6px; padding: 16px; margin: 0; font: 13.6px/1.45 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; white-space: pre; }
+        .k { color: var(--kw); }
+        .s { color: var(--str); }
+        .c { color: var(--cmt); }
+        .n { color: var(--num); }
+      </style>
+<pre><span class="k">weights</span> myWeights =
+  | <span class="n">25</span>% <span class="s">&quot;Track A&quot;</span> <span class="k">by</span> <span class="s">&quot;Artist&quot;</span>   <span class="c">// Play 25% of every song picked from weightedCollection</span>
+  | <span class="n">5</span>x  <span class="s">&quot;Track B&quot;</span> <span class="k">by</span> <span class="s">&quot;Artist&quot;</span>   <span class="c">// When shuffling, play 5x more than normal</span>
+  | <span class="n">10</span>% <span class="s">&quot;Inner Playlist&quot;</span> <span class="k">collection</span> <span class="k">by</span> <span class="s">&quot;username&quot;</span>    <span class="c">// 10% of every song, play a song</span>
+                                                     <span class="c">// from &quot;Inner Playlist&quot;</span>
+  |~ <span class="n">15</span>% someFunctionReturningSong()    <span class="c">// 15% of every song, pick one from this method.</span>
+                                        <span class="c">// Dont do this twice in a row </span>
+
+<span class="k">collection</span> weightedCollection = <span class="s">&quot;My Playlist&quot;</span> <span class="k">collection</span> <span class="k">by</span> <span class="s">&quot;username&quot;</span> <span class="k">weights</span>[myWeights]
+<span class="k">play</span> weightedCollection <span class="k">limit</span>[<span class="n">5</span>]</pre>
+    </div>
+  </foreignObject>
+</svg>

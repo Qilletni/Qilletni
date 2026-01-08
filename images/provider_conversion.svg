@@ -1,0 +1,25 @@
+<!-- Generated with https://qilletni.dev/svg-gen.html -->
+<svg fill="none" viewBox="0 0 632 180" width="632" height="180" xmlns="http://www.w3.org/2000/svg">
+  <foreignObject width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+      <style>
+        :root { --bg: #161b22; --fg: #e6edf3; --kw: #ff7b72; --str: #a5d6ff; --cmt: #8b949e; --num: #79c0ff; }
+        @media (prefers-color-scheme: light) {
+          :root { --bg: #f6f8fa; --fg: #1f2328; --kw: #cf222e; --str: #0a3069; --cmt: #6e7781; --num: #0550ae; }
+        }
+        pre { background: var(--bg); color: var(--fg); border-radius: 6px; padding: 16px; margin: 0; font: 13.6px/1.45 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; white-space: pre; }
+        .k { color: var(--kw); }
+        .s { color: var(--str); }
+        .c { color: var(--cmt); }
+        .n { color: var(--num); }
+      </style>
+<pre><span class="k">provider</span> <span class="s">&quot;lastfm&quot;</span>
+
+<span class="k">song</span> top = getTopTracks(<span class="s">&quot;adam&quot;</span>).data[<span class="n">0</span>]  <span class="c">// Get your top song from Last.fm</span>
+
+<span class="k">provider</span> <span class="s">&quot;spotify&quot;</span>
+
+<span class="k">play</span> top  <span class="c">// Auto-converted &amp; queued on your Spotify account</span></pre>
+    </div>
+  </foreignObject>
+</svg>
