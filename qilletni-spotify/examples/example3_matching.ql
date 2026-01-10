@@ -1,7 +1,7 @@
 import "spotify:recommendations.ql"
 import "spotify:play_redirect.ql"
 import "spotify:playlist_tools.ql"
-import "std:types/collections/queue.ql"
+import "std:util/queue.ql"
 
 collection metalSongs = "9-24" collection by "rubbaboy"
 

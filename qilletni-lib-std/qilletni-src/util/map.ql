@@ -1,11 +1,4 @@
 /**
- * Creates an empty [@java java.util.HashMap] instance.
- *
- * @returns[@type @java java.util.HashMap] An instance of a [@java java.util.HashMap]
- */
-native fun _emptyJavaMap()
-
-/**
  * A [@java java.util.HashMap] wrapper that may store keys and values of any type.
  */
 entity Map {
@@ -14,7 +7,14 @@ entity Map {
      * The internal [@java java.util.HashMap] object, storing the map's state.
      * @type @java java.util.HashMap
      */
-    java _map = _emptyJavaMap()
+    java _map = Map._emptyJavaMap()
+
+    /**
+     * Creates an empty [@java java.util.HashMap] instance.
+     *
+     * @returns[@type @java java.util.HashMap] An instance of a [@java java.util.HashMap]
+     */
+    native static fun _emptyJavaMap()
     
     /**
      * Creates a new map from a list of key-value pairs.

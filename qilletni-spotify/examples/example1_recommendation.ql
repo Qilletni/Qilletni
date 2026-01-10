@@ -1,7 +1,7 @@
 import "spotify:recommendations.ql"
 import "spotify:play_redirect.ql"
 import "spotify:playlist_tools.ql"
-import "std:types/collections/queue.ql"
+import "std:util/queue.ql"
 
 weights powerRotation =
     | 85% ["Monarch" by "Glasswaves",

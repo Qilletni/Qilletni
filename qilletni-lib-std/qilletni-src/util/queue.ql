@@ -1,3 +1,6 @@
+/**
+ * A Queue implementation, can hold any type.
+ */
 entity Queue {
 
     any[] _queue = []

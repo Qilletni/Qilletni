@@ -1,7 +1,7 @@
 import "spotify:recommendations.ql"
 import "spotify:play_redirect.ql"
 import "spotify:playlist_tools.ql"
-import "std:types/collections/stack.ql"
+import "std:util/stack.ql"
 
 weights powerRotation =
     | 85% ["Wants I Need" by "156/Silence", "Monarch" by "Glasswaves",

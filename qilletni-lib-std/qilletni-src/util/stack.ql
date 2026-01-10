@@ -1,3 +1,6 @@
+/**
+ * A Stack implementation, can hold any type.
+ */
 entity Stack {
 
     any[] _stack = []
