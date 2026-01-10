@@ -25,7 +25,8 @@ public class LibrarySourceFileResolver {
         }
 
         var apply = libraryResolver.get(libraryName).apply(path);
-        LOGGER.debug("applies: {}", apply);
+        // Quite verbose
+//        LOGGER.debug("applies: {}", apply);
         return Optional.ofNullable(apply);
     }
     

@@ -3,6 +3,7 @@ package dev.qilletni.lib.core;
 import dev.qilletni.api.lang.types.EntityType;
 import dev.qilletni.api.lang.types.JavaType;
 import dev.qilletni.api.lang.types.QilletniType;
+import dev.qilletni.api.lang.types.StaticEntityType;
 import dev.qilletni.api.lib.annotations.NativeOn;
 import dev.qilletni.api.lib.annotations.SkipReturnTypeAdapter;
 import org.slf4j.Logger;
@@ -17,7 +18,8 @@ public class MapFunctions {
     private static final Logger LOGGER = LoggerFactory.getLogger(MapFunctions.class);
     
     @SkipReturnTypeAdapter
-    public static Object _emptyJavaMap() {
+    @NativeOn("Map")
+    public static Object _emptyJavaMap(StaticEntityType mapEntity) {
         return new HashMap<>();
     }
 

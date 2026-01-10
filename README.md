@@ -23,7 +23,7 @@
 Qilletni is a Domain-Specific Language designed to orchestrate and manipulate music queues, playlists, and metadata across multiple streaming platforms.
 
 Where most music platform APIs are either vastly different from one another or require a learning curve, Qilletni abstracts platform-dependent logic and lets you focus on actual algorithms and orchestration.
-Qilletni treats music concepts as native constructructs, including featuring smart conversion across service providers' types.
+Qilletni treats music concepts as native constructructs, featuring smart conversion across service providers' types.
 Extension of the language is easy with a package system and native functions that seamlessly invoke Java methods. Qilletni is a statically typed and object-oriented with a familiar C-style syntax that leverages composition over inheritance.
 
 See the [Getting Started page](https://qilletni.dev/quickstart/getting_started/) in the docs to start using Qilletni.

@@ -6,6 +6,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 public class NoServiceProviderLoadedException extends QilletniContextException {
 
     public NoServiceProviderLoadedException() {
+        super("No service provider has been loaded");
     }
 
     public NoServiceProviderLoadedException(String message) {

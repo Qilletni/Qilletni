@@ -83,7 +83,7 @@ public class DynamicMusicType<T> {
             };
             
             if (optionalType.isEmpty()) {
-                if (!silent) {
+                if (!silent && !musicTypeMap.isEmpty()) {
                     LOGGER.error("Unable to convert a {} to service provider {} from the following: {}", type.getSimpleName(), currentProvider.getName(), musicTypeMap.keySet().stream().map(ServiceProvider::getName).collect(Collectors.joining(", ")));
                 }
                 
