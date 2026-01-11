@@ -7,15 +7,15 @@ group = 'dev.qilletni.lib.spotify'
 version = '1.0.0-SNAPSHOT'
 
 dependencies {
-    compileOnly 'org.apache.logging.log4j:log4j-api:2.22.1'
-    compileOnly 'org.apache.logging.log4j:log4j-core:2.22.1'
-    compileOnly 'org.apache.logging.log4j:log4j-slf4j-impl:2.22.1'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.25.1'
+    compileOnly 'org.apache.logging.log4j:log4j-core:2.25.3'
+    compileOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.1'
 
-    // Provided by the `postgres` library
+    // Provided by the `qilletni/postgres` library
     compileOnly 'org.hibernate:hibernate-core:5.5.7.Final'
-    compileOnly 'org.postgresql:postgresql:42.3.8'
+    compileOnly 'org.postgresql:postgresql:42.7.7'
     
-    implementation ('org.eclipse.jetty:jetty-server:12.0.4') {
+    implementation ('org.eclipse.jetty:jetty-server:12.0.12') {
         exclude group: 'org.slf4j', module: 'slf4j-api'
     }
 

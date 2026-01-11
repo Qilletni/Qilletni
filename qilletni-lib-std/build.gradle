@@ -7,9 +7,9 @@ group = 'dev.qilletni.lib.core'
 version = '1.0.0'
 
 dependencies {
-    compileOnly 'org.apache.logging.log4j:log4j-api:2.22.1'
-    compileOnly 'org.apache.logging.log4j:log4j-core:2.22.1'
-    compileOnly 'org.apache.logging.log4j:log4j-slf4j-impl:2.22.1'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.25.1'
+    compileOnly 'org.apache.logging.log4j:log4j-core:2.25.3'
+    compileOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.1'
 
     compileOnly 'dev.qilletni.api:qilletni-api:1.0.0-SNAPSHOT'
 }
@@ -17,8 +17,4 @@ dependencies {
 shadowJar {
     configurations = [project.configurations.runtimeClasspath]
     archiveClassifier.set('')
-}
-
-tasks.withType(JavaCompile).each {
-    it.options.compilerArgs.add('--enable-preview')
 }
