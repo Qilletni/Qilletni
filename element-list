@@ -25,8 +25,11 @@ dev.qilletni.api.lib
 dev.qilletni.api.lib.annotations
 dev.qilletni.api.lib.persistence
 dev.qilletni.api.lib.qll
+dev.qilletni.api.lib.qll.adapters
 dev.qilletni.api.music
 dev.qilletni.api.music.factories
 dev.qilletni.api.music.orchestration
 dev.qilletni.api.music.play
+dev.qilletni.api.music.strategies
+dev.qilletni.api.music.strategies.search
 dev.qilletni.api.music.supplier
