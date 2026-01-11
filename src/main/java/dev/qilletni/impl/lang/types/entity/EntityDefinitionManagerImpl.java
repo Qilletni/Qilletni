@@ -2,7 +2,7 @@ package dev.qilletni.impl.lang.types.entity;
 
 import dev.qilletni.api.lang.types.entity.EntityDefinition;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
-import dev.qilletni.impl.lang.exceptions.VariableNotFoundException;
+import dev.qilletni.impl.lang.exceptions.SymbolNotFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,7 +19,7 @@ public class EntityDefinitionManagerImpl implements EntityDefinitionManager {
     @Override
     public EntityDefinition lookup(String entityType) {
         if (!entityDefinitionMap.containsKey(entityType)) {
-            throw new VariableNotFoundException(String.format("Entity not found with type name \"%s\"", entityType));
+            throw new SymbolNotFoundException(String.format("Entity not found with type name \"%s\"", entityType));
         }
         
         return entityDefinitionMap.get(entityType);

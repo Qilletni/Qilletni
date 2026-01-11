@@ -2,7 +2,7 @@ package dev.qilletni.impl.lang.table;
 
 import dev.qilletni.api.lang.table.Symbol;
 import dev.qilletni.impl.lang.exceptions.TypeMismatchException;
-import dev.qilletni.impl.lang.exceptions.VariableNotFoundException;
+import dev.qilletni.impl.lang.exceptions.SymbolNotFoundException;
 import dev.qilletni.api.lang.types.QilletniType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +13,7 @@ public class TableUtils {
     
     public static void requireSymbolNotNull(Symbol<?> symbol, String name) {
         if (symbol == null) {
-            throw new VariableNotFoundException("Symbol %s not found!".formatted(name));
+            throw new SymbolNotFoundException("Symbol %s not found!".formatted(name));
         }
     }
     

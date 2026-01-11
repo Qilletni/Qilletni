@@ -46,7 +46,7 @@ import dev.qilletni.impl.lang.exceptions.ListOutOfBoundsException;
 import dev.qilletni.impl.lang.exceptions.ListTransformerNotFoundException;
 import dev.qilletni.impl.lang.exceptions.QilletniContextException;
 import dev.qilletni.impl.lang.exceptions.TypeMismatchException;
-import dev.qilletni.impl.lang.exceptions.VariableNotFoundException;
+import dev.qilletni.impl.lang.exceptions.SymbolNotFoundException;
 import dev.qilletni.impl.lang.internal.BackgroundTaskExecutorImpl;
 import dev.qilletni.impl.lang.internal.FunctionInvokerImpl;
 import dev.qilletni.impl.lang.internal.NativeFunctionHandler;
@@ -332,7 +332,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
             // that asmt SHOULD return the Entity to change the value of
             
             if (id.startsWith("_")) {
-                throw new VariableNotFoundException(ctx.expr_assign, "Cannot access private variable");
+                throw new SymbolNotFoundException(ctx.expr_assign, "Cannot access private variable");
             }
             
             var entityNode = ctx.asmt() != null ? ctx.asmt() : ctx.expr(0);
@@ -349,7 +349,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
             return entity;
         } else if (ctx.expr_assign != null) { // foo.bar = baz
             if (id.startsWith("_")) {
-                throw new VariableNotFoundException(ctx.expr_assign, "Cannot access private variable");
+                throw new SymbolNotFoundException(ctx.expr_assign, "Cannot access private variable");
             }
             
             var entity = visitQilletniTypedNode(ctx.expr(0), EntityTypeImpl.class);

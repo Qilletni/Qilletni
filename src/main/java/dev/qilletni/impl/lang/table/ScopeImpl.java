@@ -3,7 +3,7 @@ package dev.qilletni.impl.lang.table;
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.table.Symbol;
 import dev.qilletni.impl.lang.exceptions.AlreadyDefinedException;
-import dev.qilletni.impl.lang.exceptions.VariableNotFoundException;
+import dev.qilletni.impl.lang.exceptions.SymbolNotFoundException;
 import dev.qilletni.api.lang.types.FunctionType;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
@@ -94,7 +94,7 @@ public class ScopeImpl implements Scope {
             return parent.lookup(name);
         }
 
-        throw new VariableNotFoundException("Symbol %s not found! (scope %d)".formatted(name, scopeId));
+        throw new SymbolNotFoundException("Symbol %s not found! (scope %d)".formatted(name, scopeId));
     }
 
     @Override
@@ -105,7 +105,7 @@ public class ScopeImpl implements Scope {
     @Override
     public Symbol<FunctionType> lookupFunction(String name, int params, QilletniTypeClass<?> onType) {
         return lookupFunctionOptionally(name, params, onType)
-                .orElseThrow(() -> new VariableNotFoundException(String.format("Function %s%s with %d params not found", name, onType != null ? " on " + onType.getTypeName() : "", params)));
+                .orElseThrow(() -> new SymbolNotFoundException(String.format("Function %s%s with %d params not found", name, onType != null ? " on " + onType.getTypeName() : "", params), name, params, onType != null ? onType.getTypeName() : ""));
     }
 
     @Override
@@ -163,7 +163,7 @@ public class ScopeImpl implements Scope {
 
         allFunctions.addAll(functionSymbolTable.getOrDefault(name, Collections.emptyList()));
         if (!allowEmpty && allFunctions.isEmpty()) {
-            throw new VariableNotFoundException("Function %s not found!".formatted(name));
+            throw new SymbolNotFoundException("Function %s not found!".formatted(name));
         }
 
         return allFunctions;
