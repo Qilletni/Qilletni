@@ -12,6 +12,8 @@ jobs:
   publish-snapshot:
     runs-on: ubuntu-latest
     if: github.repository == 'Qilletni/Qilletni'
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 

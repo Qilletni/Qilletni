@@ -5,7 +5,6 @@ import dev.qilletni.api.lib.qll.QllInfo;
 import dev.qilletni.impl.lang.exceptions.lib.LibraryNotFoundException;
 import dev.qilletni.impl.lang.internal.NativeFunctionHandler;
 import dev.qilletni.impl.lib.persistence.PackageConfigImpl;
-import dev.qilletni.pkgutil.PackageSorter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

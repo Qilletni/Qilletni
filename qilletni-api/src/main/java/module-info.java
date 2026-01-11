@@ -1,5 +1,6 @@
 module qilletni.api {
     requires org.jetbrains.annotations;
+    requires com.google.gson;
     exports dev.qilletni.api;
     exports dev.qilletni.api.auth;
     exports dev.qilletni.api.music;
@@ -25,6 +26,7 @@ module qilletni.api {
     exports dev.qilletni.api.lib.annotations;
     exports dev.qilletni.api.lib.persistence;
     exports dev.qilletni.api.lib.qll;
+    exports dev.qilletni.api.lib.qll.adapters;
     exports dev.qilletni.api.lang.internal;
     exports dev.qilletni.api.lang.internal.debug;
     exports dev.qilletni.api.music.supplier;
