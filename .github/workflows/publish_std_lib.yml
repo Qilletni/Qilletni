@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/qilletni/qilletni:snapshot
+      image: ghcr.io/qilletni/qilletni:1.0.0
 
     steps:
       - uses: actions/checkout@v6

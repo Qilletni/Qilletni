@@ -11,7 +11,7 @@ dependencies {
     compileOnly 'org.apache.logging.log4j:log4j-core:2.25.3'
     compileOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.1'
 
-    compileOnly 'dev.qilletni.api:qilletni-api:1.0.0-SNAPSHOT'
+    compileOnly 'dev.qilletni.api:qilletni-api:1.0.0'
 }
 
 shadowJar {
