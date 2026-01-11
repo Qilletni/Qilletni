@@ -17,7 +17,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build Package
-        run: qilletni build -v
+        run: qilletni build
         working-directory: qilletni-spotify
 
       - name: QPM Publish
