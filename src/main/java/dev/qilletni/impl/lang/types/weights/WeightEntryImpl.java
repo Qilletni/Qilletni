@@ -7,6 +7,7 @@ import dev.qilletni.api.lang.types.weights.WeightEntry;
 import dev.qilletni.api.lang.types.weights.WeightTrackType;
 import dev.qilletni.api.lang.types.weights.WeightUnit;
 import dev.qilletni.api.lang.types.SongType;
+import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.orchestration.CollectionState;
@@ -29,23 +30,26 @@ public class WeightEntryImpl implements WeightEntry {
     private CollectionState collectionState;
     private WeightsType weights;
     private Playlist playlist;
+    private final MusicPopulator musicPopulator;
     private final DynamicProvider dynamicProvider;
 
     /**
      * Constructor for a single song, initialized later
      */
-    WeightEntryImpl(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, boolean canRepeatTrack, boolean canRepeatWeight) {
+    WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
+        this.musicPopulator = musicPopulator;
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
         this.weightTrackType = WeightTrackType.SINGLE_TRACK;
     }
 
-    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, SongType song, boolean canRepeatTrack, boolean canRepeatWeight) {
+    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, SongType song, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
+        this.musicPopulator = musicPopulator;
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
@@ -54,9 +58,10 @@ public class WeightEntryImpl implements WeightEntry {
         this.weightTrackType = WeightTrackType.SINGLE_TRACK;
     }
 
-    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, ListType songList, boolean canRepeatTrack, boolean canRepeatWeight) {
+    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, ListType songList, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
+        this.musicPopulator = musicPopulator;
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
@@ -65,9 +70,10 @@ public class WeightEntryImpl implements WeightEntry {
         this.weightTrackType = WeightTrackType.LIST;
     }
 
-    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, CollectionType collection, boolean canRepeatTrack, boolean canRepeatWeight) {
+    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, CollectionType collection, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
+        this.musicPopulator = musicPopulator;
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
@@ -76,9 +82,10 @@ public class WeightEntryImpl implements WeightEntry {
         this.weightTrackType = WeightTrackType.COLLECTION;
     }
 
-    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, WeightsType weights, boolean canRepeatTrack, boolean canRepeatWeight) {
+    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, WeightsType weights, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
+        this.musicPopulator = musicPopulator;
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
@@ -87,9 +94,10 @@ public class WeightEntryImpl implements WeightEntry {
         this.weightTrackType = WeightTrackType.WEIGHTS;
     }
 
-    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, Playlist playlist, boolean canRepeatTrack, boolean canRepeatWeight) {
+    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, Playlist playlist, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
+        this.musicPopulator = musicPopulator;
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
@@ -149,7 +157,10 @@ public class WeightEntryImpl implements WeightEntry {
         final var musicCache = dynamicProvider.getMusicCache();
         
         return switch (weightTrackType) {
-            case SINGLE_TRACK -> song.getTrack();
+            case SINGLE_TRACK -> {
+                musicPopulator.populateSong(song);
+                yield song.getTrack();
+            }
             case LIST -> {
                 var songs = songList.getItems();
                 yield ((SongType) songs.get(ThreadLocalRandom.current().nextInt(0, songs.size()))).getTrack();
@@ -167,10 +178,15 @@ public class WeightEntryImpl implements WeightEntry {
     @Override
     public List<Track> getAllTracks() {
         final var musicCache = dynamicProvider.getMusicCache();
-        
+
         return switch (weightTrackType) {
-            case SINGLE_TRACK -> List.of(song.getTrack());
-            case LIST -> songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList();
+            case SINGLE_TRACK -> {
+                musicPopulator.populateSong(song);
+                yield List.of(song.getTrack());
+            }
+            case LIST -> songList.getItems().stream().map(SongType.class::cast)
+                    .peek(musicPopulator::populateSong)
+                    .map(SongType::getTrack).toList();
             case COLLECTION -> musicCache.getPlaylistTracks(collectionState.getCollection().getPlaylist());
             case WEIGHTS -> weights.getWeightEntries().stream().flatMap(weightEntry -> weightEntry.getAllTracks().stream()).toList();
             case PLAYLIST -> musicCache.getPlaylistTracks(playlist);

@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'dev.qilletni.impl'
-version = '1.0.1-SNAPSHOT'
+version = '1.0.1'
 
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.9.1')

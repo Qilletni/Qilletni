@@ -1412,7 +1412,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         }
 
         return switch (weightValue) {
-            case CollectionType collectionType -> new WeightEntryImpl(weightInt, weightUnit, dynamicProvider, collectionType, canRepeatTrack, canRepeatWeight);
+            case CollectionType collectionType -> new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, collectionType, canRepeatTrack, canRepeatWeight);
             case ListType listType -> {
                 if (!QilletniTypeClass.SONG.equals(listType.getSubType())) {
                     throw new TypeMismatchException("Expected a song list, got a " + listType.getSubType());
@@ -1422,16 +1422,16 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                         .map(SongType.class::cast)
                         .forEach(musicPopulator::populateSong);
                 
-                yield new WeightEntryImpl(weightInt, weightUnit, dynamicProvider, listType, canRepeatTrack, canRepeatWeight);
+                yield new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, listType, canRepeatTrack, canRepeatWeight);
             }
-            case SongType songType -> new WeightEntryImpl(weightInt, weightUnit, dynamicProvider, songType, canRepeatTrack, canRepeatWeight);
+            case SongType songType -> new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, songType, canRepeatTrack, canRepeatWeight);
             case WeightsType weightsType -> {
                 var totalPercent = WeightUtils.validateWeights(weightsType);
                 if (totalPercent != 100) {
                     throw new InvalidWeightException("Nested weights must have percentage values adding up to 100%");
                 }
                 
-                yield new WeightEntryImpl(weightInt, weightUnit, dynamicProvider, weightsType, canRepeatTrack, canRepeatWeight);
+                yield new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, weightsType, canRepeatTrack, canRepeatWeight);
             }
             default -> throw new TypeMismatchException("Expected a song, collection, or list for weight value, got " + weightValue.getTypeClass());
         };

@@ -8,12 +8,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 
+@Deprecated
 public class LazyWeightEntry extends WeightEntryImpl {
 
     private final Supplier<Track> trackSupplier;
 
     public LazyWeightEntry(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, boolean canRepeatTrack, boolean canRepeatWeight, Supplier<Track> trackSupplier) {
-        super(weightAmount, weightUnit, dynamicProvider, canRepeatTrack, canRepeatWeight);
+        super(weightAmount, weightUnit, null, dynamicProvider, canRepeatTrack, canRepeatWeight);
         this.trackSupplier = trackSupplier;
     }
 
