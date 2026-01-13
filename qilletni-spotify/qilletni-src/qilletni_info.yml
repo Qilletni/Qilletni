@@ -1,5 +1,5 @@
 name: qilletni/spotify
-version: 1.0.0
+version: 1.0.1
 author: Adam Yarris
 description: A service provider and library for Spotify, allowing for recommendations, playlist modifications, and user actions.
 source_url: https://github.com/RubbaBoy/Qilletni/tree/master/qilletni-spotify
@@ -11,4 +11,5 @@ native_classes:
   - dev.qilletni.lib.spotify.PlaylistToolsFunctions
   - dev.qilletni.lib.spotify.RecommendationsFunctions
 dependencies:
-  qilletni/postgres: 1.0.0
+  qilletni/std: ^1.0.0
+  qilletni/postgres: ^1.0.0

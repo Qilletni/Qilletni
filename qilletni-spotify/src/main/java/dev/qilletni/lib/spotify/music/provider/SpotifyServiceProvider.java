@@ -158,6 +158,16 @@ public class SpotifyServiceProvider implements ServiceProvider {
             throw new ConfigInitializeException("Spotify config is missing required options, aborting");
         }
 
+        if (!"true".equals(packageConfig.get("databaseCreated").orElse("false"))) {
+            if (!HibernateUtil.createDatabaseIfNotExists(packageConfig.getOrThrow("dbUrl"), packageConfig.getOrThrow("dbUsername"), packageConfig.getOrThrow("dbPassword"))) {
+                LOGGER.warn("Exiting due to failed database creation, check your database");
+                System.exit(1);
+            }
+
+            packageConfig.set("databaseCreated", "true");
+            packageConfig.saveConfig();
+        }
+
         HibernateUtil.initializeSessionFactory(packageConfig.getOrThrow("dbUrl"), packageConfig.getOrThrow("dbUsername"), packageConfig.getOrThrow("dbPassword"));
     }
     
