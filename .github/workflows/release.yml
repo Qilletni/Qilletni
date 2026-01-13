@@ -1,0 +1,105 @@
+name: Publish Release
+
+# To release:
+# First, make sure that CPMCLI and QilletniToolchain have RELEASE versions set in Gradle
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Check version is release
+        id: check
+        run: |
+          ROOT_VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
+          API_VERSION=$(./gradlew :qilletni-api:properties -q | grep "^version:" | awk '{print $2}')
+
+          echo "qilletni project version: $ROOT_VERSION"
+          echo "qilletni-api version: $API_VERSION"
+          echo "Ref: $GITHUB_REF"
+
+          # 1. First, strict check: Root and API versions MUST always match
+          if [[ "$ROOT_VERSION" != "$API_VERSION" ]]; then
+             echo "Error: Version mismatch! Root: $ROOT_VERSION, API: $API_VERSION"
+             exit 1
+          fi
+
+          # 2. Check if this is a Tag (Release) or Branch (Snapshot)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            TAG_VERSION=${TAG#v}
+
+            if [[ "$ROOT_VERSION" != "$TAG_VERSION" ]]; then
+              echo "Error: Tag version $TAG_VERSION does not match build version $ROOT_VERSION"
+              exit 1
+            fi
+
+            if [[ "$ROOT_VERSION" =~ -SNAPSHOT$ ]]; then
+               echo "Error: Cannot release a SNAPSHOT version on a tag."
+               exit 1
+            fi
+
+            echo "is_snapshot=false" >> $GITHUB_OUTPUT
+            echo "Confirmed Release: $TAG_VERSION"
+          else
+            echo "Detected Branch Trigger (Snapshot releasing)"
+          
+            # Optional: Enforce that branch builds ARE snapshots
+            if [[ ! "$ROOT_VERSION" =~ -SNAPSHOT$ ]]; then
+               echo "Error: Build on branch must be a SNAPSHOT version. Found: $ROOT_VERSION"
+               exit 1
+            fi
+
+            echo "is_snapshot=true" >> $GITHUB_OUTPUT
+            echo "Confirmed Snapshot: $ROOT_VERSION"
+          fi
+
+      - name: Publish
+        run: ./gradlew :publishToMavenCentral :qilletni-api:publishToMavenCentral
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+
+      - name: Deploy Javadocs (Release Only)
+        if: steps.check.outputs.is_snapshot == 'false'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: qilletni-api/build/docs/javadoc
+
+      - name: Extract release notes (Release Only)
+        if: steps.check.outputs.is_snapshot == 'false'
+        uses: ffurrer2/extract-release-notes@v2
+        with:
+          changelog_file: CHANGELOG.md
+          release_notes_file: RELEASE_NOTES.md
+          prerelease: false
+
+      - name: Create GitHub Release (Release Only)
+        if: steps.check.outputs.is_snapshot == 'false'
+        run: gh release create "${{ github.ref_name }}" --notes-file RELEASE_NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
