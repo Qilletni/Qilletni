@@ -4,6 +4,10 @@ ARG SNAPSHOT=false
 ARG TOOLCHAIN_VERSION=v1.0.0
 ARG QPM_VERSION=v1.0.0
 
+LABEL qilletni.toolchain.version="${TOOLCHAIN_VERSION}"
+LABEL qilletni.qpm.version="${QPM_VERSION}"
+LABEL qilletni.snapshot="${SNAPSHOT}"
+
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /root/.qilletni/bin

@@ -10,8 +10,12 @@ on:
         options:
           - snapshot
           - release
-      version:
-        description: 'Version (required for release, e.g., 1.0.0)'
+      toolchain_version:
+        description: 'Toolchain version (required for release, e.g., v1.0.0)'
+        required: false
+        type: string
+      qpm_version:
+        description: 'QPM version (required for release, e.g., v1.0.0)'
         required: false
         type: string
 
@@ -25,15 +29,45 @@ jobs:
     if: github.ref == 'refs/heads/master'
     outputs:
       version: ${{ steps.set_version.outputs.version }}
+      toolchain_version: ${{ steps.set_component_versions.outputs.toolchain_version }}
+      qpm_version: ${{ steps.set_component_versions.outputs.qpm_version }}
       is_snapshot: ${{ inputs.release_type == 'snapshot' }}
     steps:
       - name: Validate release input
         if: inputs.release_type == 'release'
         run: |
-          if [[ -z "${{ inputs.version }}" ]]; then
-            echo "Error: Version is required for release"
+          if [[ -z "${{ inputs.toolchain_version }}" ]]; then
+            echo "Error: Toolchain version is required for release"
             exit 1
           fi
+          if [[ -z "${{ inputs.qpm_version }}" ]]; then
+            echo "Error: QPM version is required for release"
+            exit 1
+          fi
+
+      - name: Get next release version
+        id: next_version
+        if: inputs.release_type == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch all tags from the container registry
+          TAGS=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            /orgs/qilletni/packages/container/qilletni/versions \
+            --jq '.[].metadata.container.tags[]' 2>/dev/null || echo "")
+          
+          # Find the highest vN version number
+          LATEST=$(echo "$TAGS" | grep -E '^v[0-9]+$' | sed 's/v//' | sort -n | tail -1)
+          
+          if [[ -z "$LATEST" ]]; then
+            NEXT=1
+          else
+            NEXT=$((LATEST + 1))
+          fi
+          
+          echo "version=v${NEXT}" >> $GITHUB_OUTPUT
+          echo "Next version: v${NEXT}"
 
       - name: Get snapshot version from commit SHAs
         id: snapshot_version
@@ -59,7 +93,18 @@ jobs:
           if [[ "${{ inputs.release_type }}" == "snapshot" ]]; then
             echo "version=${{ steps.snapshot_version.outputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            echo "version=${{ steps.next_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set component versions
+        id: set_component_versions
+        run: |
+          if [[ "${{ inputs.release_type }}" == "snapshot" ]]; then
+            echo "toolchain_version=snapshot" >> $GITHUB_OUTPUT
+            echo "qpm_version=snapshot" >> $GITHUB_OUTPUT
+          else
+            echo "toolchain_version=${{ inputs.toolchain_version }}" >> $GITHUB_OUTPUT
+            echo "qpm_version=${{ inputs.qpm_version }}" >> $GITHUB_OUTPUT
           fi
 
   build-and-push:
@@ -111,9 +156,11 @@ jobs:
           push: true
           tags: ${{ steps.meta_snapshot.outputs.tags }}
           labels: ${{ steps.meta_snapshot.outputs.labels }}
-          no-cache: 'true'
+          no-cache: true
           build-args: |
             SNAPSHOT=true
+            TOOLCHAIN_VERSION=snapshot
+            QPM_VERSION=snapshot
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -125,6 +172,10 @@ jobs:
           push: true
           tags: ${{ steps.meta_release.outputs.tags }}
           labels: ${{ steps.meta_release.outputs.labels }}
-          no-cache: 'true'
+          no-cache: true
+          build-args: |
+            SNAPSHOT=false
+            TOOLCHAIN_VERSION=${{ needs.validate.outputs.toolchain_version }}
+            QPM_VERSION=${{ needs.validate.outputs.qpm_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
