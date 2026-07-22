@@ -8,6 +8,26 @@ include 'qilletni-spotify'
 include 'qilletni-provider-demo'
 include 'qilletni-lib-std'
 
+// Include sibling Qilletni repos if present
+def toolchainDir = file('../QilletniToolchain')
+if (toolchainDir.exists()) {
+    includeBuild(toolchainDir)
+}
+
+def qpmDir = file('../QPMCLI')
+if (qpmDir.exists()) {
+    includeBuild(qpmDir)
+}
+
+def pkgUtilDir = file('../QilletniPackageUtility')
+if (pkgUtilDir.exists()) {
+    includeBuild(pkgUtilDir) {
+        dependencySubstitution {
+            substitute module('dev.qilletni.pkgutil:qilletni-pkgutil') using project(':')
+        }
+    }
+}
+
 develocity {
     buildScan {
         termsOfUseUrl = "https://gradle.com/terms-of-service"
