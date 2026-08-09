@@ -35,14 +35,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: tools/release/package-lock.json
 
@@ -121,7 +121,7 @@ jobs:
     needs: tag-release
     if: github.repository == 'Qilletni/Qilletni' && needs.tag-release.result == 'success'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up JDK
         uses: actions/setup-java@v5
@@ -174,7 +174,7 @@ jobs:
       core_sha256: ${{ steps.hashes.outputs.core_sha256 }}
       api_sha256: ${{ steps.hashes.outputs.api_sha256 }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
@@ -188,9 +188,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: tools/release/package-lock.json
 
