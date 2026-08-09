@@ -1,5 +1,20 @@
 name: Build and Publish Docker Image
 
+# Docker publication remains manual. A release build consumes exactly one
+# `platform_version`, resolved against `release/platform/X.Y.Z.yml` (which
+# pins the exact QilletniToolchain/QPMCLI release asset name + sha256, each
+# component's commit + embedded dependency versions - all re-verified here,
+# right before downloading, against the live GitHub API). The image is built
+# and pushed to the immutable `X.Y.Z` tag first (refusing to overwrite an
+# existing `X.Y.Z` tag with conflicting provenance, but treating a matching
+# re-run as an idempotent no-op), labeled with the platform manifest's
+# sha256, source commit, and Toolchain/QPM/core versions + commits; only
+# once that succeeds are the floating `X.Y`/`X`/`latest` tags re-pointed at
+# that same image. A snapshot build is unchanged: it tracks the moving
+# `snapshot` releases and tags the image with the immutable
+# `<toolchain_sha>-<qpm_sha>` commit-pair alongside the floating `snapshot`
+# tag.
+
 on:
   workflow_dispatch:
     inputs:
@@ -10,12 +25,8 @@ on:
         options:
           - snapshot
           - release
-      toolchain_version:
-        description: 'Toolchain version (required for release, e.g., v1.0.0)'
-        required: false
-        type: string
-      qpm_version:
-        description: 'QPM version (required for release, e.g., v1.0.0)'
+      platform_version:
+        description: 'Platform version (required for release, e.g. 1.0.0), matches release/platform/X.Y.Z.yml'
         required: false
         type: string
 
@@ -29,47 +40,62 @@ jobs:
     if: github.ref == 'refs/heads/master'
     outputs:
       version: ${{ steps.set_version.outputs.version }}
-      toolchain_version: ${{ steps.set_component_versions.outputs.toolchain_version }}
-      qpm_version: ${{ steps.set_component_versions.outputs.qpm_version }}
+      toolchain_asset_url: ${{ steps.manifest.outputs.toolchain_asset_url }}
+      toolchain_sha256: ${{ steps.manifest.outputs.toolchain_sha256 }}
+      toolchain_version: ${{ steps.manifest.outputs.toolchain_version }}
+      toolchain_commit: ${{ steps.manifest.outputs.toolchain_commit }}
+      qpm_asset_url: ${{ steps.manifest.outputs.qpm_asset_url }}
+      qpm_sha256: ${{ steps.manifest.outputs.qpm_sha256 }}
+      qpm_version: ${{ steps.manifest.outputs.qpm_version }}
+      qpm_commit: ${{ steps.manifest.outputs.qpm_commit }}
+      core_version: ${{ steps.manifest.outputs.core_version }}
+      manifest_sha256: ${{ steps.manifest.outputs.manifest_sha256 }}
+      created: ${{ steps.manifest.outputs.created }}
       is_snapshot: ${{ inputs.release_type == 'snapshot' }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        if: inputs.release_type == 'release'
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        if: inputs.release_type == 'release'
+        working-directory: tools/release
+        run: npm ci
+
       - name: Validate release input
         if: inputs.release_type == 'release'
         run: |
-          if [[ -z "${{ inputs.toolchain_version }}" ]]; then
-            echo "Error: Toolchain version is required for release"
-            exit 1
-          fi
-          if [[ -z "${{ inputs.qpm_version }}" ]]; then
-            echo "Error: QPM version is required for release"
+          if [[ -z "${{ inputs.platform_version }}" ]]; then
+            echo "Error: platform_version is required for release"
             exit 1
           fi
 
-      - name: Get next release version
-        id: next_version
+      - name: Validate platform manifest
         if: inputs.release_type == 'release'
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts validate-platform-manifest \
+            --manifest "../../release/platform/${{ inputs.platform_version }}.yml"
+
+      - name: Resolve manifest, re-verify commit/asset provenance against live GitHub API
+        id: manifest
+        if: inputs.release_type == 'release'
+        working-directory: tools/release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Fetch all tags from the container registry
-          TAGS=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            /orgs/qilletni/packages/container/qilletni/versions \
-            --jq '.[].metadata.container.tags[]' 2>/dev/null || echo "")
-          
-          # Find the highest vN version number
-          LATEST=$(echo "$TAGS" | grep -E '^v[0-9]+$' | sed 's/v//' | sort -n | tail -1)
-          
-          if [[ -z "$LATEST" ]]; then
-            NEXT=1
-          else
-            NEXT=$((LATEST + 1))
-          fi
-          
-          echo "version=v${NEXT}" >> $GITHUB_OUTPUT
-          echo "Next version: v${NEXT}"
+          node --import tsx src/cli.ts resolve-platform-manifest \
+            --manifest "../../release/platform/${{ inputs.platform_version }}.yml" \
+            --token "$GH_TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Get snapshot version from commit SHAs
+      - name: Get snapshot commit SHAs
         id: snapshot_version
         if: inputs.release_type == 'snapshot'
         run: |
@@ -93,18 +119,7 @@ jobs:
           if [[ "${{ inputs.release_type }}" == "snapshot" ]]; then
             echo "version=${{ steps.snapshot_version.outputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "version=${{ steps.next_version.outputs.version }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Set component versions
-        id: set_component_versions
-        run: |
-          if [[ "${{ inputs.release_type }}" == "snapshot" ]]; then
-            echo "toolchain_version=snapshot" >> $GITHUB_OUTPUT
-            echo "qpm_version=snapshot" >> $GITHUB_OUTPUT
-          else
-            echo "toolchain_version=${{ inputs.toolchain_version }}" >> $GITHUB_OUTPUT
-            echo "qpm_version=${{ inputs.qpm_version }}" >> $GITHUB_OUTPUT
+            echo "version=${{ inputs.platform_version }}" >> $GITHUB_OUTPUT
           fi
 
   build-and-push:
@@ -113,6 +128,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -138,15 +155,57 @@ jobs:
             type=raw,value=snapshot
             type=raw,value=${{ needs.validate.outputs.version }}
 
-      - name: Extract metadata (release)
+      - name: Extract metadata (release, immutable X.Y.Z tag only)
         id: meta_release
         if: needs.validate.outputs.is_snapshot == 'false'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
-            type=raw,value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{version}},value=${{ needs.validate.outputs.version }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ needs.validate.outputs.created }}
+            dev.qilletni.platform-manifest-sha256=${{ needs.validate.outputs.manifest_sha256 }}
+            dev.qilletni.toolchain-version=${{ needs.validate.outputs.toolchain_version }}
+            dev.qilletni.toolchain-commit=${{ needs.validate.outputs.toolchain_commit }}
+            dev.qilletni.qpm-version=${{ needs.validate.outputs.qpm_version }}
+            dev.qilletni.qpm-commit=${{ needs.validate.outputs.qpm_commit }}
+            dev.qilletni.core-version=${{ needs.validate.outputs.core_version }}
+
+      # The X.Y.Z tag is immutable: an existing tag with the same manifest
+      # digest + source commit is an idempotent no-op (e.g. a re-run), but one
+      # with different provenance must never be silently overwritten.
+      - name: Check whether the immutable release tag already exists
+        id: tag_conflict
+        if: needs.validate.outputs.is_snapshot == 'false'
+        env:
+          REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }}
+          NEW_MANIFEST_SHA256: ${{ needs.validate.outputs.manifest_sha256 }}
+          NEW_COMMIT: ${{ github.sha }}
+        run: |
+          set +e
+          LABELS_JSON=$(docker buildx imagetools inspect "$REF" --format '{{json .Image.Config.Labels}}' 2>/dev/null)
+          STATUS=$?
+          set -e
+
+          if [[ $STATUS -ne 0 || -z "$LABELS_JSON" || "$LABELS_JSON" == "null" ]]; then
+            echo "Immutable tag $REF does not exist yet; proceeding with a fresh build."
+            echo "idempotent=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          EXISTING_MANIFEST_SHA256=$(echo "$LABELS_JSON" | jq -r '."dev.qilletni.platform-manifest-sha256" // empty')
+          EXISTING_COMMIT=$(echo "$LABELS_JSON" | jq -r '."org.opencontainers.image.revision" // empty')
+
+          if [[ "$EXISTING_MANIFEST_SHA256" == "$NEW_MANIFEST_SHA256" && "$EXISTING_COMMIT" == "$NEW_COMMIT" ]]; then
+            echo "Immutable tag $REF already exists with matching provenance (manifest sha256 + source commit); treating this as an idempotent re-promotion and skipping the rebuild."
+            echo "idempotent=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Immutable tag $REF already exists with conflicting provenance: existing manifest-sha256='$EXISTING_MANIFEST_SHA256' commit='$EXISTING_COMMIT' vs this build's manifest-sha256='$NEW_MANIFEST_SHA256' commit='$NEW_COMMIT'. Refusing to overwrite an immutable release tag."
+            exit 1
+          fi
 
       - name: Build and push Docker image (snapshot)
         if: needs.validate.outputs.is_snapshot == 'true'
@@ -157,15 +216,18 @@ jobs:
           tags: ${{ steps.meta_snapshot.outputs.tags }}
           labels: ${{ steps.meta_snapshot.outputs.labels }}
           no-cache: true
+          provenance: true
+          sbom: true
           build-args: |
             SNAPSHOT=true
-            TOOLCHAIN_VERSION=snapshot
-            QPM_VERSION=snapshot
+            PLATFORM_VERSION=snapshot
+            TOOLCHAIN_ASSET_URL=https://github.com/Qilletni/QilletniToolchain/releases/download/snapshot/qilletni-snapshot.tar.gz
+            QPM_ASSET_URL=https://github.com/Qilletni/QPMCLI/releases/download/snapshot/qpm-snapshot.tar.gz
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Docker image (release)
-        if: needs.validate.outputs.is_snapshot == 'false'
+      - name: Build and push the immutable release tag
+        if: needs.validate.outputs.is_snapshot == 'false' && steps.tag_conflict.outputs.idempotent != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -173,9 +235,39 @@ jobs:
           tags: ${{ steps.meta_release.outputs.tags }}
           labels: ${{ steps.meta_release.outputs.labels }}
           no-cache: true
+          provenance: true
+          sbom: true
           build-args: |
             SNAPSHOT=false
+            PLATFORM_VERSION=${{ needs.validate.outputs.version }}
+            TOOLCHAIN_ASSET_URL=${{ needs.validate.outputs.toolchain_asset_url }}
+            TOOLCHAIN_SHA256=${{ needs.validate.outputs.toolchain_sha256 }}
+            QPM_ASSET_URL=${{ needs.validate.outputs.qpm_asset_url }}
+            QPM_SHA256=${{ needs.validate.outputs.qpm_sha256 }}
+            SOURCE_COMMIT=${{ github.sha }}
+            CREATED=${{ needs.validate.outputs.created }}
+            PLATFORM_MANIFEST_SHA256=${{ needs.validate.outputs.manifest_sha256 }}
             TOOLCHAIN_VERSION=${{ needs.validate.outputs.toolchain_version }}
+            TOOLCHAIN_COMMIT=${{ needs.validate.outputs.toolchain_commit }}
             QPM_VERSION=${{ needs.validate.outputs.qpm_version }}
+            QPM_COMMIT=${{ needs.validate.outputs.qpm_commit }}
+            CORE_VERSION=${{ needs.validate.outputs.core_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Only reached once the immutable X.Y.Z tag build has succeeded (or was
+      # already published with matching provenance): the floating X.Y/X/latest
+      # tags are promoted by re-pointing them at that exact same image digest,
+      # never by an independent build.
+      - name: Promote X.Y / X / latest floating tags
+        if: needs.validate.outputs.is_snapshot == 'false'
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          docker buildx imagetools create \
+            --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${MAJOR_MINOR}" \
+            --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${MAJOR}" \
+            --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"

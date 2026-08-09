@@ -1,0 +1,50 @@
+# Platform manifest 1.0.0 - seed manifest.
+#
+# Pins the exact currently-published stable QilletniToolchain and QPMCLI
+# release assets consumed by the manually-triggered Docker release build,
+# together with the exact commit each tag points to and the dependency
+# versions each component embeds. All of the following were verified against
+# the live GitHub API before being committed here (no per-component
+# published manifest artifact exists yet for these two pre-existing
+# releases, so `legacy_verification: true` marks this seed as verified
+# directly from the tag/commit/build.gradle source rather than from such a
+# manifest; see `tools/release/README.md`):
+#   - tag -> commit:
+#     https://api.github.com/repos/Qilletni/QilletniToolchain/git/ref/tags/v1.0.1
+#     https://api.github.com/repos/Qilletni/QPMCLI/git/ref/tags/v1.0.0
+#   - release asset name + sha256:
+#     https://api.github.com/repos/Qilletni/QilletniToolchain/releases/tags/v1.0.1
+#     https://api.github.com/repos/Qilletni/QPMCLI/releases/tags/v1.0.0
+#   - embedded dependency versions, read from each commit's own `build.gradle`:
+#     https://raw.githubusercontent.com/Qilletni/QilletniToolchain/f1a6b2e02d1f089745e1c4de923565a82dbd3112/build.gradle
+#     https://raw.githubusercontent.com/Qilletni/QPMCLI/d50f8e50b826809b0943344441b749633e8e00f5/build.gradle
+#
+# Validated by `tools/release/src/platform_manifest.ts`.
+schema_version: 1
+platform_version: 1.0.0
+legacy_verification: true
+
+components:
+  toolchain:
+    repository: Qilletni/QilletniToolchain
+    version: 1.0.1
+    tag: v1.0.1
+    commit: f1a6b2e02d1f089745e1c4de923565a82dbd3112
+    asset: qilletni-1.0.1.tar.gz
+    sha256: 5bf7df3e8804e039b966e5f133324d849e242eac470a33574f54cb931b0c67a2
+    embeds:
+      core: 1.0.1
+      api: 1.0.0
+      pkgutil: 1.0.0
+      docgen: 1.0.0
+
+  qpm:
+    repository: Qilletni/QPMCLI
+    version: 1.0.0
+    tag: v1.0.0
+    commit: d50f8e50b826809b0943344441b749633e8e00f5
+    asset: qpm-1.0.0.tar.gz
+    sha256: 2613973691eb55be95254773621246771b82244454f43c7e8f2741440a7ca0ee
+    embeds:
+      api: 1.0.0
+      pkgutil: 1.0.0

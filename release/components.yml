@@ -1,0 +1,38 @@
+# Registry of onboarded release-producing components across the Qilletni
+# ecosystem, and which repositories must be notified (via a dependency
+# dispatch, see `tools/release/README.md`) after each one publishes.
+#
+# Validated by `tools/release/src/components_registry.ts`. Only the five
+# repositories approved as release producers may appear here, either as a
+# `repository` or as a `consumers` entry:
+#   Qilletni, QilletniToolchain, QPMCLI, QilletniPackageUtility, QilletniDocgen
+schema_version: 1
+
+components:
+  # Core (dev.qilletni.impl:qilletni) and API (dev.qilletni.api:qilletni-api)
+  # are always released together, at the same version, as a single release
+  # unit: one dependency dispatch per release, listing both artifacts.
+  - name: qilletni-core
+    repository: Qilletni/Qilletni
+    artifacts:
+      - dev.qilletni.impl:qilletni
+      - dev.qilletni.api:qilletni-api
+    consumers:
+      - Qilletni/QilletniToolchain
+      - Qilletni/QPMCLI
+      - Qilletni/QilletniDocgen
+
+  - name: qilletni-pkgutil
+    repository: Qilletni/QilletniPackageUtility
+    artifacts:
+      - dev.qilletni.pkgutil:qilletni-pkgutil
+    consumers:
+      - Qilletni/QilletniToolchain
+      - Qilletni/QPMCLI
+
+  - name: qilletni-docgen
+    repository: Qilletni/QilletniDocgen
+    artifacts:
+      - dev.qilletni.docgen:qilletni-docgen
+    consumers:
+      - Qilletni/QilletniToolchain

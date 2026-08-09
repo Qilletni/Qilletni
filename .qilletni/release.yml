@@ -1,0 +1,35 @@
+# Release configuration for this repository, consumed by
+# `tools/release/src/release_config.ts` and the reusable release
+# workflows. See `tools/release/README.md` for the full schema/CLI contract.
+schema_version: 1
+repository: Qilletni/Qilletni
+
+components:
+  # Core (dev.qilletni.impl:qilletni) and API (dev.qilletni.api:qilletni-api)
+  # are released together, at the same version, as a single release unit -
+  # see `release/components.yml`, which notifies consumers once with both
+  # artifacts.
+  - name: qilletni-core
+    kind: maven
+    version_file: gradle.properties
+    version_key: qilletniVersion
+    changelog: CHANGELOG.md
+    registry_component: qilletni-core
+    artifacts:
+      - maven:
+          group: dev.qilletni.impl
+          artifact: qilletni
+        japicmp:
+          enabled: true
+          report: build/reports/japicmp/qilletni-core.xml
+      - maven:
+          group: dev.qilletni.api
+          artifact: qilletni-api
+        japicmp:
+          enabled: true
+          report: qilletni-api/build/reports/japicmp/qilletni-api.xml
+
+# japicmp policy (applied to every artifact above with `japicmp.enabled: true`):
+#   patch - reject any API change (additive or breaking)
+#   minor - reject breaking changes only; additive changes are allowed
+#   major - breaking changes are allowed only when `docs/migrations/X.Y.Z.md` exists

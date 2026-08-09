@@ -1,0 +1,183 @@
+name: Reusable - Dependency Dispatch
+
+# Central, reusable "notify consumers" logic shared by every onboarded
+# release producer. Invoked with:
+#   uses: Qilletni/Qilletni/.github/workflows/reusable-dependency-dispatch.yml@master
+#
+# Builds+validates the dependency-dispatch payload for a just-published
+# component, then dispatches it (via a short-lived GitHub App installation
+# token, narrowly scoped to each individual consumer repository in turn) to
+# every repository registered as a consumer of that component in
+# `release/components.yml`.
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: "Component name as registered in release/components.yml"
+        required: true
+        type: string
+      version:
+        description: "Released SemVer version"
+        required: true
+        type: string
+      commit:
+        description: "Full commit SHA that was released"
+        required: true
+        type: string
+      repository:
+        description: "owner/repo of the releasing repository"
+        required: true
+        type: string
+      artifacts:
+        description: "Newline-separated 'coordinates=sha256' entries"
+        required: true
+        type: string
+    secrets:
+      app-id:
+        required: true
+      app-private-key:
+        required: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          sparse-checkout: |
+            release/components.yml
+            tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: tools/release
+        run: npm ci
+
+      - name: Validate components registry
+        working-directory: tools/release
+        run: >
+          node --import tsx src/cli.ts validate-components-registry
+          --registry ../../release/components.yml
+          --allowed-repository Qilletni/Qilletni
+          --allowed-repository Qilletni/QilletniToolchain
+          --allowed-repository Qilletni/QPMCLI
+          --allowed-repository Qilletni/QilletniPackageUtility
+          --allowed-repository Qilletni/QilletniDocgen
+
+      - name: Build dependency-dispatch payload
+        id: payload
+        working-directory: tools/release
+        run: |
+          ARTIFACT_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            ARTIFACT_ARGS+=(--artifact "$line")
+          done <<< "${{ inputs.artifacts }}"
+
+          PAYLOAD=$(node --import tsx src/cli.ts build-dependency-payload \
+            --component "${{ inputs.component }}" \
+            --version "${{ inputs.version }}" \
+            --commit "${{ inputs.commit }}" \
+            --repository "${{ inputs.repository }}" \
+            "${ARTIFACT_ARGS[@]}")
+          {
+            echo 'json<<PAYLOAD_EOF'
+            echo "$PAYLOAD"
+            echo 'PAYLOAD_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve consumers for this component
+        id: consumers
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts consumers-for \
+            --registry "$GITHUB_WORKSPACE/release/components.yml" \
+            --component "${{ inputs.component }}" >> "$GITHUB_OUTPUT"
+
+      # Each consumer below gets its own narrowly-scoped GitHub App
+      # installation token (a single `repositories:` entry), per the
+      # "scope repositories narrowly" policy, and is skipped entirely if it
+      # is not listed as a consumer of this component in the registry.
+      - name: Dispatch to Qilletni/QilletniToolchain
+        if: contains(fromJson(steps.consumers.outputs.json), 'Qilletni/QilletniToolchain')
+        uses: actions/create-github-app-token@v3
+        id: app-token-toolchain
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: Qilletni
+          repositories: QilletniToolchain
+
+      - name: Repository dispatch - QilletniToolchain
+        if: steps.app-token-toolchain.outputs.token != ''
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token-toolchain.outputs.token }}
+          repository: Qilletni/QilletniToolchain
+          event-type: qilletni-dependency-release
+          client-payload: ${{ steps.payload.outputs.json }}
+
+      - name: Dispatch to Qilletni/QPMCLI
+        if: contains(fromJson(steps.consumers.outputs.json), 'Qilletni/QPMCLI')
+        uses: actions/create-github-app-token@v3
+        id: app-token-qpm
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: Qilletni
+          repositories: QPMCLI
+
+      - name: Repository dispatch - QPMCLI
+        if: steps.app-token-qpm.outputs.token != ''
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token-qpm.outputs.token }}
+          repository: Qilletni/QPMCLI
+          event-type: qilletni-dependency-release
+          client-payload: ${{ steps.payload.outputs.json }}
+
+      - name: Dispatch to Qilletni/QilletniPackageUtility
+        if: contains(fromJson(steps.consumers.outputs.json), 'Qilletni/QilletniPackageUtility')
+        uses: actions/create-github-app-token@v3
+        id: app-token-pkgutil
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: Qilletni
+          repositories: QilletniPackageUtility
+
+      - name: Repository dispatch - QilletniPackageUtility
+        if: steps.app-token-pkgutil.outputs.token != ''
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token-pkgutil.outputs.token }}
+          repository: Qilletni/QilletniPackageUtility
+          event-type: qilletni-dependency-release
+          client-payload: ${{ steps.payload.outputs.json }}
+
+      - name: Dispatch to Qilletni/QilletniDocgen
+        if: contains(fromJson(steps.consumers.outputs.json), 'Qilletni/QilletniDocgen')
+        uses: actions/create-github-app-token@v3
+        id: app-token-docgen
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: Qilletni
+          repositories: QilletniDocgen
+
+      - name: Repository dispatch - QilletniDocgen
+        if: steps.app-token-docgen.outputs.token != ''
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token-docgen.outputs.token }}
+          repository: Qilletni/QilletniDocgen
+          event-type: qilletni-dependency-release
+          client-payload: ${{ steps.payload.outputs.json }}

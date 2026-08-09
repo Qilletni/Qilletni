@@ -1,0 +1,47 @@
+# Platform release candidates - mutable staging file.
+#
+# Unlike an immutable `release/platform/X.Y.Z.yml` manifest, this file is
+# expected to change over time as QilletniToolchain/QPMCLI publish new
+# releases. It is, however, mutable ONLY through a reviewed pull request:
+#
+#   - The "Platform Candidate Dispatch" workflow
+#     (.github/workflows/platform-candidate-dispatch.yml) opens a PR here
+#     automatically whenever Toolchain or QPM publishes, after re-verifying
+#     the incoming release event's tag/asset/hash/embedded-version claims
+#     live against the GitHub API.
+#   - A maintainer may otherwise hand-edit it directly via a normal PR.
+#
+# Nothing ever pushes to this file outside a PR, and this file alone never
+# triggers a Docker build: a maintainer separately runs the manual
+# "Prepare Platform Release" workflow (platform-prepare.yml) to promote a
+# reviewed snapshot of it into a new, immutable `release/platform/X.Y.Z.yml`.
+#
+# Seeded identically to the verified composition in `1.0.0.yml` (see that
+# file's header for the exact verification sources); validated by
+# `tools/release/src/platform_candidates.ts`.
+schema_version: 1
+
+components:
+  toolchain:
+    repository: Qilletni/QilletniToolchain
+    version: 1.0.1
+    tag: v1.0.1
+    commit: f1a6b2e02d1f089745e1c4de923565a82dbd3112
+    asset: qilletni-1.0.1.tar.gz
+    sha256: 5bf7df3e8804e039b966e5f133324d849e242eac470a33574f54cb931b0c67a2
+    embeds:
+      core: 1.0.1
+      api: 1.0.0
+      pkgutil: 1.0.0
+      docgen: 1.0.0
+
+  qpm:
+    repository: Qilletni/QPMCLI
+    version: 1.0.0
+    tag: v1.0.0
+    commit: d50f8e50b826809b0943344441b749633e8e00f5
+    asset: qpm-1.0.0.tar.gz
+    sha256: 2613973691eb55be95254773621246771b82244454f43c7e8f2741440a7ca0ee
+    embeds:
+      api: 1.0.0
+      pkgutil: 1.0.0

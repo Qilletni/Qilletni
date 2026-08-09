@@ -1,0 +1,106 @@
+name: Reusable - Snapshot Follow-up
+
+# Central, reusable "prepare next development iteration" logic. Invoked
+# right after a release publish succeeds with:
+#   uses: Qilletni/Qilletni/.github/workflows/reusable-snapshot-followup.yml@master
+#   secrets: inherit
+#
+# Opens a PR bumping the version file to `X.Y.(Z+1)-SNAPSHOT` and removing
+# the now-consumed `release/pending-release.json` marker, so `master`
+# immediately resumes snapshot publishing (preserved unchanged by this
+# release overhaul) and the next master push is unambiguously a snapshot.
+
+on:
+  workflow_call:
+    inputs:
+      version_file:
+        description: "Path to the .properties-style version file"
+        required: true
+        type: string
+      version_key:
+        description: "Key within version_file holding the version"
+        required: true
+        type: string
+      released_version:
+        description: "The version that was just released (no leading v)"
+        required: true
+        type: string
+    secrets:
+      app-id:
+        required: true
+      app-private-key:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  snapshot-followup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint a repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: master
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: .qilletni-release-tooling/tools/release
+        run: npm ci
+
+      - name: Compute next snapshot version
+        id: next
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          NEXT=$(node --import tsx src/cli.ts next-version --current-version "${{ inputs.released_version }}" --snapshot)
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Update version file to the next snapshot
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts set-property \
+            --file "$GITHUB_WORKSPACE/${{ inputs.version_file }}" \
+            --key "${{ inputs.version_key }}" \
+            --value "${{ steps.next.outputs.version }}"
+
+      - name: Remove the consumed release marker
+        run: rm -f release/pending-release.json
+
+      - name: Remove sparse release-tooling checkout
+        run: rm -rf .qilletni-release-tooling
+
+      - name: Open snapshot follow-up PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          branch: chore/next-snapshot-${{ steps.next.outputs.version }}
+          commit-message: "chore: prepare next development iteration ${{ steps.next.outputs.version }}"
+          title: "chore: prepare next development iteration ${{ steps.next.outputs.version }}"
+          labels: release
+          body: |
+            Follow-up to the `${{ inputs.released_version }}` release: resumes snapshot
+            development at `${{ steps.next.outputs.version }}` and removes the now-consumed
+            `release/pending-release.json` marker.

@@ -1,0 +1,139 @@
+name: Platform - Prepare Release
+
+# Manually promotes a reviewed release/platform/candidates.yml snapshot into a
+# new, immutable release/platform/X.Y.Z.yml. The platform version is bumped
+# from the latest existing release/platform/X.Y.Z.yml file (never from an
+# individual component's own version), matching the "platform bump is
+# user-visible distribution impact" convention documented in RELEASE.md.
+#
+# This only opens a PR; it never publishes anything by itself. Docker
+# publication (build-docker.yml) remains its own separate, manual step that
+# later consumes the resulting platform_version.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Platform version bump kind'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    steps:
+      - name: Mint a repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+          private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
+          owner: Qilletni
+          repositories: Qilletni
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - name: Ensure this runs from up-to-date protected master
+        run: |
+          if [[ "${{ github.ref }}" != "refs/heads/master" ]]; then
+            echo "::error::Platform release preparation must be run from the 'master' branch (got '${{ github.ref }}')."
+            exit 1
+          fi
+
+          git fetch origin master --quiet
+          LOCAL_SHA=$(git rev-parse HEAD)
+          REMOTE_SHA=$(git rev-parse origin/master)
+          if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
+            echo "::error::Checked-out commit ($LOCAL_SHA) is behind origin/master ($REMOTE_SHA); re-run the workflow to pick up the latest commit."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: tools/release
+        run: npm ci
+
+      - name: Validate the reviewed candidates file
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts validate-platform-candidates \
+            --candidates "$GITHUB_WORKSPACE/release/platform/candidates.yml"
+
+      - name: Re-verify the candidates' commits and assets against the live GitHub API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts verify-platform-manifest-commits \
+            --manifest "$GITHUB_WORKSPACE/release/platform/candidates.yml" --token "$GH_TOKEN"
+          node --import tsx src/cli.ts verify-live-asset-provenance \
+            --manifest "$GITHUB_WORKSPACE/release/platform/candidates.yml" --token "$GH_TOKEN"
+
+      - name: Determine the next platform version (from the latest release/platform/X.Y.Z.yml)
+        id: next
+        working-directory: tools/release
+        run: |
+          LATEST=$(ls "$GITHUB_WORKSPACE/release/platform" | node --import tsx src/cli.ts latest-platform-version)
+          if [[ -z "$LATEST" ]]; then
+            LATEST="0.0.0"
+          fi
+          NEXT=$(node --import tsx src/cli.ts next-version --current-version "$LATEST" --bump "${{ inputs.bump }}")
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse if the target manifest already exists
+        run: |
+          TARGET="$GITHUB_WORKSPACE/release/platform/${{ steps.next.outputs.version }}.yml"
+          if [[ -f "$TARGET" ]]; then
+            echo "::error::'$TARGET' already exists; refusing to overwrite an existing platform manifest."
+            exit 1
+          fi
+
+      - name: Promote the reviewed candidates snapshot into the new manifest
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts promote-candidates-to-platform-manifest \
+            --candidates "$GITHUB_WORKSPACE/release/platform/candidates.yml" \
+            --platform-version "${{ steps.next.outputs.version }}" \
+            --output "$GITHUB_WORKSPACE/release/platform/${{ steps.next.outputs.version }}.yml"
+
+      - name: Open the platform-release preparation PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          branch: platform-release/${{ steps.next.outputs.version }}
+          commit-message: "chore(platform): prepare platform release ${{ steps.next.outputs.version }}"
+          title: "chore(platform): platform release ${{ steps.next.outputs.version }}"
+          labels: release
+          body: |
+            Automated platform-release preparation.
+
+            - Bump: `${{ inputs.bump }}`
+            - New platform version: `${{ steps.next.outputs.version }}`
+
+            Adds `release/platform/${{ steps.next.outputs.version }}.yml`, a copy of the
+            currently-reviewed `release/platform/candidates.yml` snapshot, re-verified live
+            against the GitHub API immediately before this PR was opened. `candidates.yml`
+            itself is left unchanged.
+
+            Merging this PR does **not** trigger a Docker build by itself. Docker publication
+            remains its own manual step (`workflow_dispatch` on `build-docker.yml`), which will
+            later consume this new `platform_version`.

@@ -1,0 +1,168 @@
+name: Reusable - Dependency Update
+
+# Central, reusable logic for a consumer repository to safely apply an
+# incoming dependency-dispatch notification (see `dependency_payload.ts` and
+# `reusable-dependency-dispatch.yml`, the sender side). Each onboarded
+# consumer's own local `repository_dispatch` caller workflow invokes this
+# with:
+#   uses: Qilletni/Qilletni/.github/workflows/reusable-dependency-update.yml@master
+#   with:
+#     payload: ${{ toJson(github.event.client_payload) }}
+#   secrets:
+#     app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+#     app-private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
+#
+# See `tools/release/examples/dependency-update.yml` for the exact minimal
+# local caller and `tools/release/README.md` for the full contract.
+#
+# The payload's schema is validated, then checked against the caller's own
+# checked-in `.qilletni/release.yml` `dependencies` mapping - its
+# component/repository/coordinate set is never trusted at face value. Every
+# artifact's exact Maven Central jar + SHA-256 is re-verified live before any
+# file is touched. Only the single metadata `version_file`/`version_key`
+# configured for that upstream component is ever updated - never a
+# payload-supplied path or command. Gradle dependency locks are then
+# refreshed (with sibling composite builds explicitly disabled), the
+# caller's own test suite and stable-dependency guard are run, and the
+# resolved dependency graph is confirmed to really contain every requested
+# coordinate that isn't explicitly marked 'resolved: false' in the caller's
+# own config (a coordinate that's mandatory/hash-verified but never expected
+# on that caller's classpath), before opening a signed, review-only PR. This
+# workflow never auto-merges.
+
+on:
+  workflow_call:
+    inputs:
+      payload:
+        description: "The dependency-dispatch client_payload, serialized as JSON (e.g. toJson(github.event.client_payload))"
+        required: true
+        type: string
+      release_config:
+        description: "Path to the caller repository's release.yml"
+        required: false
+        type: string
+        default: .qilletni/release.yml
+    secrets:
+      app-id:
+        required: true
+      app-private-key:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  update-dependency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint a repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: .qilletni-release-tooling/tools/release
+        run: npm ci
+
+      - name: Write the incoming payload to a file
+        env:
+          PAYLOAD_JSON: ${{ inputs.payload }}
+        run: printf '%s' "$PAYLOAD_JSON" > /tmp/payload.json
+
+      - name: Validate the payload against this repository's 'dependencies' mapping
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts validate-dependency-payload \
+            --payload /tmp/payload.json \
+            --config "$GITHUB_WORKSPACE/${{ inputs.release_config }}"
+
+      - name: Re-verify every artifact against Maven Central (live download + sha256)
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts verify-dependency-artifacts --payload /tmp/payload.json
+
+      - name: Apply the metadata update (only the configured version file/key)
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts apply-dependency-update \
+            --payload /tmp/payload.json \
+            --config "$GITHUB_WORKSPACE/${{ inputs.release_config }}" \
+            --base-dir "$GITHUB_WORKSPACE"
+
+      - name: Read component/version from the payload (for the PR branch/title)
+        id: payload
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts read-payload-fields --payload /tmp/payload.json >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Refresh Gradle dependency locks (sibling composite builds explicitly disabled)
+        run: ./gradlew dependencies --write-locks -PincludeSiblingBuilds=false
+
+      - name: Run the caller's test suite and stable-dependency guard
+        run: ./gradlew clean test checkNoSnapshotDependencies -PincludeSiblingBuilds=false
+
+      - name: Generate the resolved dependency graph report
+        run: |
+          ./gradlew dependencies --configuration runtimeClasspath -PincludeSiblingBuilds=false \
+            --console=plain -q > /tmp/resolved-dependencies.txt
+
+      - name: Confirm the resolved dependency graph contains the requested version(s)
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts check-resolved-dependency-versions \
+            --payload /tmp/payload.json \
+            --config "$GITHUB_WORKSPACE/${{ inputs.release_config }}" < /tmp/resolved-dependencies.txt
+
+      - name: Remove sparse release-tooling checkout
+        run: rm -rf .qilletni-release-tooling
+
+      - name: Open the dependency-update PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          branch: dependency-update/${{ steps.payload.outputs.component }}-${{ steps.payload.outputs.version }}
+          commit-message: "chore(deps): update ${{ steps.payload.outputs.component }} to ${{ steps.payload.outputs.version }}"
+          title: "chore(deps): ${{ steps.payload.outputs.component }} -> ${{ steps.payload.outputs.version }}"
+          labels: dependency-update
+          body: |
+            Automated dependency update triggered by a `${{ steps.payload.outputs.component }}` release.
+
+            Every artifact's exact Maven Central coordinates and SHA-256 were re-verified live
+            before this PR was opened; only the configured version file/key for
+            `${{ steps.payload.outputs.component }}` was changed. Gradle dependency locks were
+            refreshed, the full test suite and stable-dependency guard were run, and the resolved
+            dependency graph was confirmed to actually contain the requested version(s).
+
+            This PR never auto-merges.

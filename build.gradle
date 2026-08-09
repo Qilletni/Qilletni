@@ -3,10 +3,19 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'com.vanniktech.maven.publish' version '0.35.0'
+    id 'me.champeau.gradle.japicmp' version '0.4.6'
+    id 'org.cyclonedx.bom' version '3.2.4'
 }
 
 group = 'dev.qilletni.impl'
-version = '1.0.2-SNAPSHOT'
+version = qilletniVersion
+
+// Locks the resolved dependency graph (gradle.lockfile) for reproducibility
+// Regenerate with `./gradlew dependencies --write-locks` after
+// a dependency change.
+dependencyLocking {
+    lockAllConfigurations()
+}
 
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.9.1')
@@ -103,4 +112,65 @@ tasks.named('sourcesJar').configure {
 
 test {
     useJUnitPlatform()
+}
+
+// CycloneDX JSON SBOM, attached as a release asset by the publish workflow.
+// Output: build/reports/cyclonedx-direct/bom.json
+cyclonedxDirectBom {
+    includeConfigs = ['runtimeClasspath']
+}
+
+// Public API compatibility check for `dev.qilletni.impl:qilletni`, enforced against
+// the policy in `tools/release/src/japicmp_policy.ts` (see `.qilletni/release.yml`).
+// `-PjapicmpBaselineJar=/path/to/old-qilletni.jar` points at the previously published
+// baseline jar (downloaded and hash-verified beforehand by `release.artifact_verify`,
+// see `tools/release/README.md`); the task is skipped if it is not supplied (e.g. for
+// the first release). A local file path is used (rather than a Maven coordinate) to
+// avoid Gradle resolving the dependency back to this very project.
+import me.champeau.gradle.japicmp.JapicmpTask
+
+def japicmpBaselineJar = findProperty('japicmpBaselineJar')
+
+tasks.register('japicmpCheck', JapicmpTask) {
+    description = 'Compares the current public API against the published baseline jar'
+    onlyIf { japicmpBaselineJar != null }
+    
+    if (japicmpBaselineJar != null) {
+        oldClasspath.from(files(japicmpBaselineJar))
+    }
+    
+    newClasspath.from(tasks.named('jar').map { it.outputs.files })
+    dependsOn tasks.named('jar')
+    accessModifier = 'public'
+    onlyBinaryIncompatibleModified = false
+    failOnModification = false
+    ignoreMissingClasses = true
+    xmlOutputFile = file("${buildDir}/reports/japicmp/qilletni-core.xml")
+}
+
+// Guards a stable release publication from ever resolving a SNAPSHOT or
+// dynamic-version dependency, run by release.yml before publishing a tag.
+// Only considers actual external module dependencies (not project(':...')
+// dependencies).
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+tasks.register('checkNoSnapshotDependencies') {
+    description = 'Fails if the resolved runtime/compile classpath contains a SNAPSHOT or dynamic external dependency version'
+    doLast {
+        def offenders = []
+        ['runtimeClasspath', 'compileClasspath'].each { configName ->
+            configurations.getByName(configName).incoming.resolutionResult.allComponents.each { component ->
+                def id = component.id
+                if (id instanceof ModuleComponentIdentifier) {
+                    def version = id.version
+                    if (version.contains('SNAPSHOT') || version.contains('+') || version.startsWith('latest.')) {
+                        offenders << "${configName}: ${id.group}:${id.module}:${version}".toString()
+                    }
+                }
+            }
+        }
+        if (offenders) {
+            throw new GradleException("A stable release must not resolve SNAPSHOT/dynamic dependencies:\n" + offenders.join('\n'))
+        }
+    }
 }

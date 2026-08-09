@@ -8,22 +8,30 @@ include 'qilletni-spotify'
 include 'qilletni-provider-demo'
 include 'qilletni-lib-std'
 
-// Include sibling Qilletni repos if present
-def toolchainDir = file('../QilletniToolchain')
-if (toolchainDir.exists()) {
-    includeBuild(toolchainDir)
-}
+// Sibling Qilletni repos are only wired in as composite builds when
+// explicitly opted into (-PincludeSiblingBuilds=true), even if their
+// directories happen to exist on disk. This keeps release/CI builds (which
+// must resolve published Maven coordinates, not local project substitution)
+// from silently picking up an unrelated local checkout.
+def includeSiblingBuilds = providers.gradleProperty('includeSiblingBuilds').getOrElse('false').toBoolean()
 
-def qpmDir = file('../QPMCLI')
-if (qpmDir.exists()) {
-    includeBuild(qpmDir)
-}
+if (includeSiblingBuilds) {
+    def toolchainDir = file('../QilletniToolchain')
+    if (toolchainDir.exists()) {
+        includeBuild(toolchainDir)
+    }
 
-def pkgUtilDir = file('../QilletniPackageUtility')
-if (pkgUtilDir.exists()) {
-    includeBuild(pkgUtilDir) {
-        dependencySubstitution {
-            substitute module('dev.qilletni.pkgutil:qilletni-pkgutil') using project(':')
+    def qpmDir = file('../QPMCLI')
+    if (qpmDir.exists()) {
+        includeBuild(qpmDir)
+    }
+
+    def pkgUtilDir = file('../QilletniPackageUtility')
+    if (pkgUtilDir.exists()) {
+        includeBuild(pkgUtilDir) {
+            dependencySubstitution {
+                substitute module('dev.qilletni.pkgutil:qilletni-pkgutil') using project(':')
+            }
         }
     }
 }

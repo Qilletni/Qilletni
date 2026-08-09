@@ -1,0 +1,221 @@
+name: Reusable - Prepare Release
+
+# Central, reusable release-preparation logic shared by every onboarded
+# release producer (Qilletni, QilletniToolchain, QPMCLI,
+# QilletniPackageUtility, QilletniDocgen). Each repository's own
+# `.github/workflows/release-prepare.yml` caller invokes this with
+# `uses: Qilletni/Qilletni/.github/workflows/reusable-release-prepare.yml@master`
+# and `secrets: inherit` (needed for the GitHub App credentials below).
+#
+# Computes the next SemVer version from the latest published stable tag
+# (never from the version file's own, already pre-bumped `-SNAPSHOT` value),
+# updates the version file, promotes the CHANGELOG `Unreleased` section, runs
+# the test suite, writes the `release/pending-release.json` marker, then
+# opens a signed-commit PR for human review. Nothing is published here;
+# merging the PR triggers the post-merge publish automation (see the root
+# `RELEASE.md`).
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: "Component name declared in .qilletni/release.yml"
+        required: true
+        type: string
+      bump:
+        description: "SemVer bump kind: patch, minor or major"
+        required: true
+        type: string
+      release_config:
+        description: "Path to the repository's release.yml"
+        required: false
+        type: string
+        default: .qilletni/release.yml
+    secrets:
+      app-id:
+        required: true
+      app-private-key:
+        required: true
+    outputs:
+      next_version:
+        description: "The computed next version"
+        value: ${{ jobs.prepare.outputs.next_version }}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      next_version: ${{ steps.next.outputs.version }}
+    steps:
+      - name: Mint a repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Ensure release preparation runs from up-to-date protected master
+        run: |
+          if [[ "${{ github.ref }}" != "refs/heads/master" ]]; then
+            echo "::error::Release preparation must be run from the 'master' branch (got '${{ github.ref }}')."
+            exit 1
+          fi
+
+          git fetch origin master --quiet
+          LOCAL_SHA=$(git rev-parse HEAD)
+          REMOTE_SHA=$(git rev-parse origin/master)
+          if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
+            echo "::error::Checked-out commit ($LOCAL_SHA) is behind origin/master ($REMOTE_SHA); re-run the workflow to pick up the latest commit."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: .qilletni-release-tooling/tools/release
+        run: npm ci
+
+      - name: Validate release configuration
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts validate-release-config --config "${{ github.workspace }}/${{ inputs.release_config }}"
+
+      - name: Read component metadata (version file/key, changelog, kind)
+        id: component
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts read-component-metadata \
+            --config "$GITHUB_WORKSPACE/${{ inputs.release_config }}" \
+            --component "${{ inputs.component }}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the CHANGELOG Unreleased section is not empty
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts check-changelog-unreleased \
+            --changelog "$GITHUB_WORKSPACE/${{ steps.component.outputs.changelog }}"
+
+      - name: Read current version file value
+        id: read
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          VERSION=$(node --import tsx src/cli.ts get-property --file "$GITHUB_WORKSPACE/${{ steps.component.outputs.version_file }}" --key "${{ steps.component.outputs.version_key }}")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Determine the latest published stable tag
+        id: latest_tag
+        run: |
+          git fetch --tags origin --quiet
+          {
+            echo 'tags<<TAGS_EOF'
+            git tag --list 'v*.*.*'
+            echo 'TAGS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version from the latest stable tag (not the pre-bumped file value)
+        id: next
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          LATEST_STABLE=$(printf '%s' "${{ steps.latest_tag.outputs.tags }}" | node --import tsx src/cli.ts latest-stable-tag)
+
+          ARGS=(--current-file-version "${{ steps.read.outputs.version }}" --bump "${{ inputs.bump }}")
+          if [[ -n "$LATEST_STABLE" ]]; then
+            ARGS+=(--latest-stable-version "$LATEST_STABLE")
+          fi
+
+          NEXT=$(node --import tsx src/cli.ts next-release-version "${ARGS[@]}")
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce the major-release migration guide requirement
+        if: inputs.bump == 'major'
+        run: |
+          MIGRATION_DOC="docs/migrations/${{ steps.next.outputs.version }}.md"
+          if [[ ! -f "$GITHUB_WORKSPACE/$MIGRATION_DOC" ]]; then
+            echo "::error::A major release requires '$MIGRATION_DOC' to already exist before preparing the release."
+            exit 1
+          fi
+
+      - name: Update version file
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts set-property \
+            --file "$GITHUB_WORKSPACE/${{ steps.component.outputs.version_file }}" \
+            --key "${{ steps.component.outputs.version_key }}" \
+            --value "${{ steps.next.outputs.version }}"
+
+      - name: Promote CHANGELOG Unreleased section
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts promote-changelog \
+            --changelog "$GITHUB_WORKSPACE/${{ steps.component.outputs.changelog }}" \
+            --version "${{ steps.next.outputs.version }}"
+
+      - name: Write the release marker
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          node --import tsx src/cli.ts write-release-marker \
+            --marker "$GITHUB_WORKSPACE/release/pending-release.json" \
+            --component "${{ inputs.component }}" \
+            --from-version "${{ steps.read.outputs.version }}" \
+            --to-version "${{ steps.next.outputs.version }}" \
+            --bump "${{ inputs.bump }}"
+
+      - name: Set up JDK
+        if: steps.component.outputs.kind == 'maven' || steps.component.outputs.kind == 'cli'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+        if: steps.component.outputs.kind == 'maven' || steps.component.outputs.kind == 'cli'
+
+      - name: Run the test suite against the prepared release
+        if: steps.component.outputs.kind == 'maven' || steps.component.outputs.kind == 'cli'
+        run: ./gradlew clean test
+
+      - name: Remove sparse release-tooling checkout
+        run: rm -rf .qilletni-release-tooling
+
+      - name: Open release preparation PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          branch: release/${{ inputs.component }}-${{ steps.next.outputs.version }}
+          commit-message: "chore(release): prepare ${{ inputs.component }} ${{ steps.next.outputs.version }}"
+          title: "chore(release): ${{ inputs.component }} ${{ steps.next.outputs.version }}"
+          labels: release
+          body: |
+            Automated release preparation for `${{ inputs.component }}`.
+
+            - Bump: `${{ inputs.bump }}`
+            - Version: `${{ steps.read.outputs.version }}` -> `${{ steps.next.outputs.version }}`
+
+            Merging this PR does **not** publish anything directly. It automatically
+            triggers publishing from the merge commit once merged (see the root
+            `RELEASE.md`); a direct `v${{ steps.next.outputs.version }}` tag push remains
+            available only as a manual recovery path.

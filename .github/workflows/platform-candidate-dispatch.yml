@@ -1,0 +1,119 @@
+name: Platform Candidate Dispatch
+
+# Receives a `repository_dispatch` event named `qilletni-platform-component-release`
+# from QilletniToolchain or QPMCLI right after either publishes a release. The
+# `client_payload` is the release-event schema in
+# `tools/release/src/release_event.ts`:
+#
+#   {
+#     "schema_version": 1,
+#     "component": "toolchain" | "qpm",
+#     "repository": "Qilletni/QilletniToolchain" | "Qilletni/QPMCLI",
+#     "version": "X.Y.Z",
+#     "tag": "vX.Y.Z",
+#     "commit": "<40-char sha>",
+#     "asset": "<release asset filename>",
+#     "sha256": "<64-char hex digest>",
+#     "embeds": { ... the versions that component's own release embeds ... }
+#   }
+#
+# The event is schema-validated, then its tag/commit/asset/sha256 claims are
+# re-verified live against the GitHub API (never trusted at face value), before
+# updating only the named component's entry in `release/platform/candidates.yml`
+# and opening a reviewed PR. This PR never auto-merges.
+
+on:
+  repository_dispatch:
+    types: [qilletni-platform-component-release]
+
+permissions:
+  contents: read
+
+jobs:
+  update-candidate:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: tools/release
+        run: npm ci
+
+      - name: Write the incoming release event to a file
+        env:
+          EVENT_JSON: ${{ toJson(github.event.client_payload) }}
+        run: printf '%s' "$EVENT_JSON" > /tmp/event.json
+
+      - name: Validate the release event's schema
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts validate-release-event --event /tmp/event.json
+
+      - name: Re-verify the event's tag/commit/asset/sha256 against the live GitHub API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts verify-release-event-provenance --event /tmp/event.json --token "$GH_TOKEN"
+
+      - name: Update the candidates file (only the named component's entry)
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts update-platform-candidates \
+            --candidates "$GITHUB_WORKSPACE/release/platform/candidates.yml" \
+            --event /tmp/event.json
+
+      - name: Validate the updated candidates file
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts validate-platform-candidates \
+            --candidates "$GITHUB_WORKSPACE/release/platform/candidates.yml"
+
+      - name: Read component/version from the event (for the PR branch/title)
+        id: event
+        working-directory: tools/release
+        run: |
+          node --import tsx src/cli.ts read-event-fields --event /tmp/event.json >> "$GITHUB_OUTPUT"
+
+      - name: Mint a repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+          private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
+          owner: Qilletni
+          repositories: Qilletni
+
+      - name: Open the candidate-update PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          branch: platform-candidates/${{ steps.event.outputs.component }}-${{ steps.event.outputs.version }}
+          commit-message: "chore(platform): update ${{ steps.event.outputs.component }} candidate to ${{ steps.event.outputs.version }}"
+          title: "chore(platform): ${{ steps.event.outputs.component }} candidate -> ${{ steps.event.outputs.version }}"
+          labels: platform-candidate
+          body: |
+            Automated platform-candidate update triggered by a `${{ steps.event.outputs.component }}`
+            release (`${{ steps.event.outputs.repository }}@${{ steps.event.outputs.version }}`).
+
+            The event's tag/commit/asset/sha256 were re-verified live against the GitHub API
+            before this PR was opened; only the `${{ steps.event.outputs.component }}` entry in
+            `release/platform/candidates.yml` was changed.
+
+            This PR never auto-merges. Merging it does **not** publish anything by itself; a
+            maintainer later runs the manual "Prepare Platform Release" workflow
+            (`platform-prepare.yml`) to promote a reviewed candidates snapshot into a new
+            `release/platform/X.Y.Z.yml`.
