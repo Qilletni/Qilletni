@@ -179,8 +179,11 @@ Docker publication remains manual, on this repository, and unrelated to individu
 component versions:
 
 - **Snapshot**: fetches the latest `snapshot` commit SHAs from QilletniToolchain and
-  QPMCLI and tags the image `snapshot` plus the immutable `<toolchain_sha>-<qpm_sha>`
-  commit-pair (unchanged).
+  QPMCLI, and resolves each one's release asset URL live off the same mutable `snapshot`
+  release (the asset is named for the version that produced it - e.g.
+  `qilletni-1.0.2-SNAPSHOT.tar.gz` - so it cannot be hardcoded), then tags the image
+  `snapshot` plus the immutable `<toolchain_sha>-<qpm_sha>` commit-pair. Unlike a release
+  build, a snapshot asset is not hash-pinned.
 - **Release**: takes a single `platform_version` input (e.g. `1.0.0`), matching
   `release/platform/X.Y.Z.yml`. That manifest pins the exact Toolchain/QPM release asset
   name, SHA-256, tagged commit, and embedded component versions for the platform version;

@@ -10,10 +10,11 @@ name: Build and Publish Docker Image
 # re-run as an idempotent no-op), labeled with the platform manifest's
 # sha256, source commit, and Toolchain/QPM/core versions + commits; only
 # once that succeeds are the floating `X.Y`/`X`/`latest` tags re-pointed at
-# that same image. A snapshot build is unchanged: it tracks the moving
-# `snapshot` releases and tags the image with the immutable
-# `<toolchain_sha>-<qpm_sha>` commit-pair alongside the floating `snapshot`
-# tag.
+# that same image. A snapshot build instead tracks the moving `snapshot`
+# releases - resolving each component's commit SHA and (version-named,
+# therefore un-hardcodable) asset URL live off them - and tags the image with
+# the immutable `<toolchain_sha>-<qpm_sha>` commit-pair alongside the floating
+# `snapshot` tag. Snapshot assets are not hash-pinned.
 
 on:
   workflow_dispatch:
@@ -40,11 +41,11 @@ jobs:
     if: github.ref == 'refs/heads/master'
     outputs:
       version: ${{ steps.set_version.outputs.version }}
-      toolchain_asset_url: ${{ steps.manifest.outputs.toolchain_asset_url }}
+      toolchain_asset_url: ${{ steps.manifest.outputs.toolchain_asset_url || steps.snapshot_version.outputs.toolchain_asset_url }}
       toolchain_sha256: ${{ steps.manifest.outputs.toolchain_sha256 }}
       toolchain_version: ${{ steps.manifest.outputs.toolchain_version }}
       toolchain_commit: ${{ steps.manifest.outputs.toolchain_commit }}
-      qpm_asset_url: ${{ steps.manifest.outputs.qpm_asset_url }}
+      qpm_asset_url: ${{ steps.manifest.outputs.qpm_asset_url || steps.snapshot_version.outputs.qpm_asset_url }}
       qpm_sha256: ${{ steps.manifest.outputs.qpm_sha256 }}
       qpm_version: ${{ steps.manifest.outputs.qpm_version }}
       qpm_commit: ${{ steps.manifest.outputs.qpm_commit }}
@@ -95,23 +96,57 @@ jobs:
             --manifest "../../release/platform/${{ inputs.platform_version }}.yml" \
             --token "$GH_TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Get snapshot commit SHAs
+      # A snapshot asset is named for the version that produced it
+      # (`qilletni-X.Y.Z-SNAPSHOT.tar.gz` / `qpm-X.Y.Z-SNAPSHOT.tar.gz`), the
+      # same convention a release manifest pins by exact name - so the URL
+      # cannot be hardcoded here and is resolved live off the mutable
+      # `snapshot` release instead, alongside its commit SHA.
+      - name: Resolve snapshot commit SHAs and asset URLs
         id: snapshot_version
         if: inputs.release_type == 'snapshot'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TOOLCHAIN_SHA=$(curl -sf https://api.github.com/repos/Qilletni/QilletniToolchain/git/ref/tags/snapshot | jq -r '.object.sha[:7]')
-          if [[ -z "$TOOLCHAIN_SHA" || "$TOOLCHAIN_SHA" == "null" ]]; then
-            echo "Error: Failed to fetch QilletniToolchain snapshot tag"
-            exit 1
-          fi
+          set -euo pipefail
 
-          QPM_SHA=$(curl -sf https://api.github.com/repos/Qilletni/QPMCLI/git/ref/tags/snapshot | jq -r '.object.sha[:7]')
-          if [[ -z "$QPM_SHA" || "$QPM_SHA" == "null" ]]; then
-            echo "Error: Failed to fetch QPMCLI snapshot tag"
-            exit 1
-          fi
+          api() {
+            curl -sf \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$1"
+          }
 
-          echo "version=${TOOLCHAIN_SHA}-${QPM_SHA}" >> $GITHUB_OUTPUT
+          # Sets RESOLVED_SHA and writes <key>_sha / <key>_asset_url outputs.
+          resolve() {
+            local repo="$1" prefix="$2" key="$3"
+            local sha urls count
+
+            sha=$(api "https://api.github.com/repos/${repo}/git/ref/tags/snapshot" | jq -r '.object.sha[:7]')
+            if [[ -z "$sha" || "$sha" == "null" ]]; then
+              echo "::error::Failed to fetch ${repo} snapshot tag"
+              exit 1
+            fi
+
+            urls=$(api "https://api.github.com/repos/${repo}/releases/tags/snapshot" \
+              | jq -r --arg p "$prefix" '.assets[] | select((.name | startswith($p)) and (.name | endswith(".tar.gz"))) | .browser_download_url')
+            count=$(grep -c . <<< "${urls:-}" || true)
+            if [[ "$count" -ne 1 ]]; then
+              echo "::error::Expected exactly one '${prefix}*.tar.gz' asset on the ${repo} snapshot release, found ${count}: ${urls}"
+              exit 1
+            fi
+
+            echo "${key}_sha=${sha}" >> "$GITHUB_OUTPUT"
+            echo "${key}_asset_url=${urls}" >> "$GITHUB_OUTPUT"
+            RESOLVED_SHA="$sha"
+          }
+
+          resolve Qilletni/QilletniToolchain qilletni- toolchain
+          TOOLCHAIN_SHA="$RESOLVED_SHA"
+
+          resolve Qilletni/QPMCLI qpm- qpm
+          QPM_SHA="$RESOLVED_SHA"
+
+          echo "version=${TOOLCHAIN_SHA}-${QPM_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Set version output
         id: set_version
@@ -221,8 +256,8 @@ jobs:
           build-args: |
             SNAPSHOT=true
             PLATFORM_VERSION=snapshot
-            TOOLCHAIN_ASSET_URL=https://github.com/Qilletni/QilletniToolchain/releases/download/snapshot/qilletni-snapshot.tar.gz
-            QPM_ASSET_URL=https://github.com/Qilletni/QPMCLI/releases/download/snapshot/qpm-snapshot.tar.gz
+            TOOLCHAIN_ASSET_URL=${{ needs.validate.outputs.toolchain_asset_url }}
+            QPM_ASSET_URL=${{ needs.validate.outputs.qpm_asset_url }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
