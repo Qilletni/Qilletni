@@ -40,7 +40,12 @@ LABEL dev.qilletni.core-version="${CORE_VERSION}"
 
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /root/.qilletni/bin
+# Same layout as a CLI install (install/install.sh): one directory per
+# component, symlinked into bin/. The archives are flat and both contain a
+# component-manifest.json, so unpacking them into a shared directory would
+# silently drop one of them.
+ENV QILLETNI_PLATFORM_DIR="/root/.qilletni/platforms/${PLATFORM_VERSION}"
+RUN mkdir -p "$QILLETNI_PLATFORM_DIR/toolchain" "$QILLETNI_PLATFORM_DIR/qpm" /root/.qilletni/bin
 
 # Downloads + verifies (when a sha256 is supplied) a pinned release asset.
 COPY <<'EOF' /usr/local/bin/fetch-and-verify.sh
@@ -60,15 +65,18 @@ RUN chmod +x /usr/local/bin/fetch-and-verify.sh
 
 RUN set -x && \
     /usr/local/bin/fetch-and-verify.sh "$TOOLCHAIN_ASSET_URL" "$TOOLCHAIN_SHA256" /tmp/toolchain.tar.gz && \
-    tar -xzf /tmp/toolchain.tar.gz -C /root/.qilletni/bin && \
+    tar -xzf /tmp/toolchain.tar.gz -C "$QILLETNI_PLATFORM_DIR/toolchain" && \
     rm /tmp/toolchain.tar.gz
 
 RUN set -x && \
     /usr/local/bin/fetch-and-verify.sh "$QPM_ASSET_URL" "$QPM_SHA256" /tmp/qpm.tar.gz && \
-    tar -xzf /tmp/qpm.tar.gz -C /root/.qilletni/bin && \
+    tar -xzf /tmp/qpm.tar.gz -C "$QILLETNI_PLATFORM_DIR/qpm" && \
     rm /tmp/qpm.tar.gz
 
-RUN chmod -R 755 /root/.qilletni/bin
+# The launchers resolve their jar through `readlink -f "$0"`, so symlinks work.
+RUN ln -s "$QILLETNI_PLATFORM_DIR/toolchain/qilletni" /root/.qilletni/bin/qilletni && \
+    ln -s "$QILLETNI_PLATFORM_DIR/qpm/qpm" /root/.qilletni/bin/qpm && \
+    chmod -R 755 "$QILLETNI_PLATFORM_DIR" /root/.qilletni/bin
 
 ENV PATH="/root/.qilletni/bin:${PATH}"
 

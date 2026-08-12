@@ -28,6 +28,28 @@ Extension of the language is easy with a package system and native functions tha
 
 See the [Getting Started page](https://qilletni.dev/quickstart/getting_started/) in the docs to start using Qilletni.
 
+## Install
+
+Requires Java 22 or newer.
+
+```bash
+curl -L https://install.qilletni.dev/ | bash
+```
+
+This installs `qilletni`, `qpm`, and `qilletni-up` under `~/.qilletni`. Then open a new shell, or `source ~/.qilletni/env`.
+
+```bash
+qilletni-up update       # move to the newest release
+qilletni-up status       # show what is installed
+qilletni-up uninstall    # remove it, asking before deleting your packages
+```
+
+A Docker image is also published, if you would rather not install anything:
+
+```bash
+docker run --rm -v "$(pwd)":/workspace ghcr.io/qilletni/qilletni:latest qilletni --help
+```
+
 ## Key Features
 
 ### Music as a First-Class Citizen

@@ -113,6 +113,19 @@ jobs:
             --platform-version "${{ steps.next.outputs.version }}" \
             --output "$GITHUB_WORKSPACE/release/platform/${{ steps.next.outputs.version }}.yml"
 
+      # `stable` is what install.sh resolves `latest` to, so merging this PR is
+      # what makes the new composition live for CLI installs. This is only for
+      # non-snapshot versions.
+      - name: Point the CLI installer at the new manifest
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing to write a non-release version ('$VERSION') to release/platform/stable."
+            exit 1
+          fi
+          echo "$VERSION" > "$GITHUB_WORKSPACE/release/platform/stable"
+
       - name: Open the platform-release preparation PR
         uses: peter-evans/create-pull-request@v8
         with:
@@ -132,6 +145,10 @@ jobs:
             currently-reviewed `release/platform/candidates.yml` snapshot, re-verified live
             against the GitHub API immediately before this PR was opened. `candidates.yml`
             itself is left unchanged.
+
+            Also points `release/platform/stable` at this version. That file is what the
+            CLI installer resolves `latest` to, so **merging this PR is what makes this
+            composition the default for `curl -L https://install.qilletni.dev/ | sh`**.
 
             Merging this PR does **not** trigger a Docker build by itself. Docker publication
             remains its own manual step (`workflow_dispatch` on `build-docker.yml`), which will

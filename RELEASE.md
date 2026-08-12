@@ -198,6 +198,31 @@ component versions:
   has succeeded are the floating `X.Y`/`X`/`latest` tags re-pointed at the same image, with
   build provenance and an SBOM attached throughout.
 
+### CLI installs
+
+Platform manifests are not only a Docker input: `install/install.sh` (served via
+`https://install.qilletni.dev/`, which redirects to the copy of that file on `master`) is
+the end-user installer, and it installs a platform version too. It reads
+`release/platform/stable` to resolve `latest`, then reads that version's manifest and
+verifies each downloaded asset against the `sha256` recorded there - so a CLI install and
+the Docker image of the same platform version are the same reviewed, hash-pinned
+composition.
+
+`release/platform/stable` is written by `platform-prepare.yml` in the same reviewed PR that
+creates the manifest, so **merging a platform-release PR is what makes that version the
+default for new installs**. It can only ever name a stable `X.Y.Z`. That workflow is its
+only writer and is reachable only from a released component (`platform-dispatch` needs
+`build-and-publish`, which is tag-only), and refuses a non-release version outright.
+
+Installs are laid out one directory per component
+(`~/.qilletni/platforms/X.Y.Z/{toolchain,qpm}`, symlinked into `~/.qilletni/bin`), which the
+Dockerfile mirrors. Both release archives are flat and both contain a
+`component-manifest.json`, so they must never be unpacked into a shared directory.
+
+Unlike everything else described here, the installer has no release gate - it is served
+from `master`, so a change to it is live for new users as soon as it merges.
+
 See `release/components.yml` for the release-producer/consumer registry,
-`release/platform/candidates.yml` for the mutable, PR-reviewed staging file, and
-`release/platform/X.Y.Z.yml` for immutable platform manifests.
+`release/platform/candidates.yml` for the mutable, PR-reviewed staging file,
+`release/platform/X.Y.Z.yml` for immutable platform manifests, and
+`release/platform/stable` for the version new CLI installs get.
