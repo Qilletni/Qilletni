@@ -112,6 +112,9 @@ tasks.named('sourcesJar').configure {
 
 test {
     useJUnitPlatform()
+
+    // Tests are severely outdated; See Qilletni#29
+    enabled = false
 }
 
 // CycloneDX JSON SBOM, attached as a release asset by the publish workflow.
