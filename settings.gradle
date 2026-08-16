@@ -5,7 +5,7 @@ plugins {
 rootProject.name = 'qilletni'
 include 'qilletni-api'
 include 'qilletni-spotify'
-include 'qilletni-provider-demo'
+// include 'qilletni-provider-demo' // Disabled for now, see Qilletni#30
 include 'qilletni-lib-std'
 
 // Sibling Qilletni repos are only wired in as composite builds when
