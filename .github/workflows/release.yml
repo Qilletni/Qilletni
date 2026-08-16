@@ -39,6 +39,9 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+          # Otherwise checkout's persisted GITHUB_TOKEN extraheader outranks the
+          # App token in the tag push URL below, and the tag triggers nothing.
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -72,6 +75,16 @@ jobs:
             exit 1
           fi
 
+          # Until the snapshot follow-up PR merges, master still carries the stable
+          # version and marker, so ordinary commits look like the release merge; an
+          # existing tag at an earlier commit is what tells them apart.
+          EXISTING_SHA=$(git -C "$GITHUB_WORKSPACE" rev-parse --verify --quiet "refs/tags/v$ROOT_VERSION^{commit}" || true)
+          if [[ -n "$EXISTING_SHA" && "$EXISTING_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Tag 'v$ROOT_VERSION' already exists at $EXISTING_SHA; this is an ordinary commit landing before the snapshot follow-up PR was merged, not a release merge."
+            echo "is_release_merge=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           echo "is_release_merge=true" >> "$GITHUB_OUTPUT"
           echo "version=$ROOT_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$ROOT_VERSION" >> "$GITHUB_OUTPUT"
@@ -97,8 +110,22 @@ jobs:
                 --component qilletni-core \
                 --version "${{ steps.detect.outputs.version }}"
 
+      # A ref pushed with GITHUB_TOKEN never starts a workflow run, so the tag
+      # would never reach `build-and-publish`. Push it as the App instead.
+      - name: Mint a repository-scoped GitHub App token for the tag push
+        id: app-token
+        if: steps.detect.outputs.is_release_merge == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+          private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
       - name: Idempotently create the immutable release tag
         if: steps.detect.outputs.is_release_merge == 'true'
+        env:
+          TAG_PUSH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           TAG="${{ steps.detect.outputs.tag }}"
           EXISTING_SHA=$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" || true)
@@ -111,7 +138,8 @@ jobs:
             echo "Tag '$TAG' already exists at this commit; nothing to do (idempotent)."
           else
             git tag "$TAG" "$GITHUB_SHA"
-            git push origin "refs/tags/$TAG"
+            # Authenticated as the App - see `persist-credentials` on the checkout.
+            git push "https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$TAG"
           fi
 
   # Runs only on a push to `master` while the version is still a SNAPSHOT
@@ -241,7 +269,7 @@ jobs:
 
       - name: Ensure the resolved dependency graph has no SNAPSHOT/dynamic versions
         run: |
-          ./gradlew checkNoSnapshotDependencies :qilletni-api:checkNoSnapshotDependencies
+          ./gradlew :checkNoSnapshotDependencies :qilletni-api:checkNoSnapshotDependencies
 
       - name: Determine previous released version
         id: previous
@@ -285,10 +313,12 @@ jobs:
           fi
           echo "policy=$POLICY" >> "$GITHUB_OUTPUT"
 
+      # Root-qualified: an unqualified `japicmpCheck` would also run the API's,
+      # against the *core* baseline jar, overwriting its report with nonsense.
       - name: Run japicmp compatibility check (when a previous version exists)
         if: steps.previous.outputs.previous_version != ''
         run: |
-          ./gradlew japicmpCheck -PjapicmpBaselineJar="${{ steps.baseline.outputs.core_jar }}"
+          ./gradlew :japicmpCheck -PjapicmpBaselineJar="${{ steps.baseline.outputs.core_jar }}"
           ./gradlew :qilletni-api:japicmpCheck -PjapicmpBaselineJar="${{ steps.baseline.outputs.api_jar }}"
 
       - name: Enforce japicmp policy (when a previous version exists)
@@ -308,7 +338,7 @@ jobs:
 
       - name: Generate CycloneDX SBOMs
         run: |
-          ./gradlew cyclonedxDirectBom :qilletni-api:cyclonedxDirectBom
+          ./gradlew :cyclonedxDirectBom :qilletni-api:cyclonedxDirectBom
 
       - name: Publish
         run: ./gradlew :publishToMavenCentral :qilletni-api:publishToMavenCentral
