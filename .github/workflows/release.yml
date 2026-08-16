@@ -101,7 +101,7 @@ jobs:
         if: steps.detect.outputs.is_release_merge == 'true'
         run: |
           TAG="${{ steps.detect.outputs.tag }}"
-          EXISTING_SHA=$(git rev-parse "refs/tags/$TAG" 2>/dev/null || true)
+          EXISTING_SHA=$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" || true)
 
           if [[ -n "$EXISTING_SHA" ]]; then
             if [[ "$EXISTING_SHA" != "$GITHUB_SHA" ]]; then
