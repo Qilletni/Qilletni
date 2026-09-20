@@ -1,0 +1,6 @@
+{
+  "bump": "patch",
+  "component": "qilletni-core",
+  "from_version": "1.0.2-SNAPSHOT",
+  "to_version": "1.0.2"
+}
