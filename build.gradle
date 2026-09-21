@@ -118,9 +118,15 @@ test {
 }
 
 // CycloneDX JSON SBOM, attached as a release asset by the publish workflow.
-// Output: build/reports/cyclonedx-direct/bom.json
+// Output: build/reports/cyclonedx-direct/qilletni-core-bom.json
+//
+// The plugin defaults every project's SBOM to `bom.json`, so core's and the
+// API's would collide as release assets (a GitHub release asset is named after
+// its file, and two assets cannot share a name). Name them per component here
+// rather than renaming at release time.
 cyclonedxDirectBom {
     includeConfigs = ['runtimeClasspath']
+    jsonOutput = layout.buildDirectory.file('reports/cyclonedx-direct/qilletni-core-bom.json')
 }
 
 // Public API compatibility check for `dev.qilletni.impl:qilletni`, enforced against
