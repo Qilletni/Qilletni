@@ -375,9 +375,24 @@ jobs:
 
       - name: Create GitHub Release with SBOMs
         run: |
-          gh release create "${{ github.ref_name }}" --notes-file RELEASE_NOTES.md \
-            "build/reports/cyclonedx-direct/bom.json#qilletni-core-bom.json" \
-            "qilletni-api/build/reports/cyclonedx-direct/bom.json#qilletni-api-bom.json"
+          # A release asset is named after its file, and two assets cannot share
+          # a name, so the SBOMs are named per component by the `cyclonedxDirectBom`
+          # config in each build.gradle rather than renamed here. Note that
+          # `path#text` would set an asset's display LABEL, not its name.
+          #
+          # Everything before this step (the Maven Central publish in particular)
+          # is not repeatable, so this one has to be safe to re-run on its own
+          # after a partial failure: create the release only if it is missing,
+          # then upload the assets separately rather than through `create`.
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release edit "${{ github.ref_name }}" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "${{ github.ref_name }}" --notes-file RELEASE_NOTES.md --verify-tag
+          fi
+
+          gh release upload "${{ github.ref_name }}" --clobber \
+            build/reports/cyclonedx-direct/qilletni-core-bom.json \
+            qilletni-api/build/reports/cyclonedx-direct/qilletni-api-bom.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

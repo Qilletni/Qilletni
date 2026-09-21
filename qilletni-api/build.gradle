@@ -52,9 +52,13 @@ mavenPublishing {
 }
 
 // CycloneDX JSON SBOM, attached as a release asset by the publish workflow.
-// Output: build/reports/cyclonedx-direct/bom.json
+// Output: qilletni-api/build/reports/cyclonedx-direct/qilletni-api-bom.json
+//
+// Named per component (rather than the plugin's default `bom.json`) so it does
+// not collide with core's SBOM when both are attached to the same release.
 cyclonedxDirectBom {
     includeConfigs = ['runtimeClasspath']
+    jsonOutput = layout.buildDirectory.file('reports/cyclonedx-direct/qilletni-api-bom.json')
 }
 
 // Public API compatibility check for `dev.qilletni.api:qilletni-api`, enforced against
