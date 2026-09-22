@@ -125,8 +125,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Refresh Gradle dependency locks (sibling composite builds explicitly disabled)
-        run: ./gradlew dependencies --write-locks -PincludeSiblingBuilds=false
+      - name: Refresh Gradle dependency locks (every project, sibling composite builds explicitly disabled)
+        run: |
+          # `dependencies` is a single-project task: unqualified it resolves only
+          # the root, leaving a subproject's lockfile pinned to the old version.
+          # Injected so no consumer repository needs its own lock-refresh task.
+          cat > "$RUNNER_TEMP/lock-all.init.gradle" <<'INIT'
+          allprojects {
+              tasks.register('resolveAndLockAllConfigurations') {
+                  doLast {
+                      configurations.findAll { it.canBeResolved }*.resolve()
+                  }
+              }
+          }
+          INIT
+
+          ./gradlew --init-script "$RUNNER_TEMP/lock-all.init.gradle" \
+            resolveAndLockAllConfigurations --write-locks -PincludeSiblingBuilds=false
 
       - name: Run the caller's test suite and stable-dependency guard
         run: ./gradlew clean test checkNoSnapshotDependencies -PincludeSiblingBuilds=false
