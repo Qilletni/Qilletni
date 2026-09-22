@@ -148,8 +148,14 @@ jobs:
 
       - name: Generate the resolved dependency graph report
         run: |
+          # A `compileOnly` upstream dependency never reaches runtimeClasspath,
+          # so report both. runtimeClasspath is appended last because the check
+          # takes the last entry per coordinate, keeping it authoritative for
+          # anything on both classpaths.
+          ./gradlew dependencies --configuration compileClasspath -PincludeSiblingBuilds=false \
+            --console=plain -q > /tmp/resolved-dependencies.txt || true
           ./gradlew dependencies --configuration runtimeClasspath -PincludeSiblingBuilds=false \
-            --console=plain -q > /tmp/resolved-dependencies.txt
+            --console=plain -q >> /tmp/resolved-dependencies.txt
 
       - name: Confirm the resolved dependency graph contains the requested version(s)
         working-directory: .qilletni-release-tooling/tools/release
