@@ -14,11 +14,11 @@ components:
       pkgutil: 1.0.0
   qpm:
     repository: Qilletni/QPMCLI
-    version: 1.0.0
-    tag: v1.0.0
-    commit: d50f8e50b826809b0943344441b749633e8e00f5
-    asset: qpm-1.0.0.tar.gz
-    sha256: 2613973691eb55be95254773621246771b82244454f43c7e8f2741440a7ca0ee
+    version: 1.0.1
+    tag: v1.0.1
+    commit: 0ffa6ede89f650fa4a4b4a8578b368f4860d421c
+    asset: qpm-1.0.1.tar.gz
+    sha256: 7e4ebc8d35d613becec8507c461cad378f0d43c8f04773ab279811f897a75175
     embeds:
-      api: 1.0.0
+      api: 1.0.2
       pkgutil: 1.0.0
