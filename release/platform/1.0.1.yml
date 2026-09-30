@@ -1,0 +1,25 @@
+schema_version: 1
+platform_version: 1.0.1
+components:
+  toolchain:
+    repository: Qilletni/QilletniToolchain
+    version: 1.0.2
+    tag: v1.0.2
+    commit: 201bd8880719cc777a8973a7a7e49ad22bc08f39
+    asset: qilletni-1.0.2.tar.gz
+    sha256: 24b15372e6d0ff030695591c84629ad6006b9c989ca17ec64f3f1fe1dc0428f4
+    embeds:
+      api: 1.0.2
+      core: 1.0.2
+      docgen: 1.0.0
+      pkgutil: 1.0.0
+  qpm:
+    repository: Qilletni/QPMCLI
+    version: 1.0.1
+    tag: v1.0.1
+    commit: 0ffa6ede89f650fa4a4b4a8578b368f4860d421c
+    asset: qpm-1.0.1.tar.gz
+    sha256: 7e4ebc8d35d613becec8507c461cad378f0d43c8f04773ab279811f897a75175
+    embeds:
+      api: 1.0.2
+      pkgutil: 1.0.0
