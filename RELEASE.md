@@ -1,228 +1,453 @@
-## Qilletni Release Protocol
+# Qilletni Release Protocol
 
-Qilletni consists of several repositories, so releasing in the correct order is critical.
+This document gives the procedure to release a Qilletni component. It also shows how the
+release moves to the repositories that use it. It is the main release document for all five producer
+repositories. The other repositories keep a short `RELEASE.md` with only their own facts.
 
-Five repositories are onboarded as release producers: **Qilletni**, **QilletniToolchain**,
-**QPMCLI**, **QilletniPackageUtility** and **QilletniDocgen**. Each declares its own
-`.qilletni/release.yml` (schema/validation in `tools/release/src/release_config.ts`).
-The central, reusable release-preparation logic lives in this repository
-(`.github/workflows/reusable-*.yml`); every producer's own repository has a small local
-"caller" workflow that invokes it.
+## Overview
 
-The TypeScript release CLI referenced throughout this document (`tools/release/...`) is a
-submodule pinned to a commit of [`Qilletni/ReleaseTooling`](https://github.com/Qilletni/ReleaseTooling).
+```mermaid
+flowchart TD
+    A{{"Manual: run Release - Prepare"}} --> B{{"Manual: merge the release PR"}}
+    B --> C["Create the vX.Y.Z tag"]
+    C --> D["Publish the release"]
+    D --> E{{"Manual: merge the snapshot PR"}}
+    D --> F["Open a dependency PR"]
+    F --> G{{"Manual: merge the dependency PR"}}
+    G -->|if a release is necessary| A
+```
 
-### Version centralization
+- A hexagon with "Manual:" is a step that the maintainer does.
+- A rectangle is a step that a workflow does.
 
-`Qilletni` publishes two artifacts, `dev.qilletni.impl:qilletni` (core) and
-`dev.qilletni.api:qilletni-api`, from a single `qilletniVersion` declared once in the
-root `gradle.properties`. They are always released together, at the same version, as one
-release unit registered as `qilletni-core` in `release/components.yml`.
+A component release has these steps. The maintainer does the steps that show **(manual)**.
 
-### Preparing a release (any onboarded producer)
+1. Write the changelog, and a migration guide for a major bump. **(manual)**
+2. Run the `Release - Prepare` workflow. **(manual)**
+3. Merge the release PR. **(manual)**
+4. The workflow creates the tag and publishes the release.
+5. Merge the snapshot PR. **(manual)**
+6. The workflow opens a dependency PR in each consumer repository.
+7. Merge each dependency PR, then decide if that repository needs a release. **(manual)**
 
-1. Run that repository's `Release - Prepare` workflow (`workflow_dispatch`), choosing a
-   `patch`/`minor`/`major` bump.
-2. It calls `Qilletni/Qilletni/.github/workflows/reusable-release-prepare.yml@master`, which:
-   - Requires `master` to be the ref being dispatched from and up to date with `origin`.
-   - Computes the next version from the **latest stable `vX.Y.Z` tag** (not the current, already
-     pre-bumped, `-SNAPSHOT` version file), so a repository sitting at `1.0.2-SNAPSHOT` correctly
-     produces `1.0.2`, not `1.0.3`.
-   - Requires a non-empty `## [Unreleased]` section in `CHANGELOG.md`, and (for a `major` bump)
-     a `docs/migrations/X.Y.Z.md` migration document.
-   - Runs `./gradlew clean test` and fails the workflow if it doesn't pass.
-   - Updates the component's version file/key and promotes `Unreleased` to `## [X.Y.Z] - <date>`,
-     leaving a fresh, empty `Unreleased` section behind.
-   - Writes a `release/pending-release.json` marker recording the component, `from`/`to`
-     versions and bump kind, committed on the release branch alongside the version/changelog
-     changes. This marker is what lets the japicmp gate later know the bump kind without
-     re-deriving it (and re-verified for provenance, see below, so it can't be spoofed by an
-     unrelated PR).
-   - Mints a GitHub App installation token (`QILLETNI_RELEASE_APP_ID` /
-     `QILLETNI_RELEASE_APP_PRIVATE_KEY`) scoped to just this repository, and opens a signed,
-     labelled (`release`) PR via `peter-evans/create-pull-request@v8` for human review.
-3. **This PR never auto-merges**, same as a dependency-update PR; a maintainer reviews and
-   merges it manually.
+A platform release and a library package release are separate processes. Refer to
+[Release the platform](#release-the-platform) and
+[Publish a library package](#publish-a-library-package).
 
-### Publishing a release (fully automatic after merge)
+## Producer repositories
 
-`release.yml` reacts to `master` pushes and to `vX.Y.Z` tag pushes, split into three jobs:
+| Repository | Component | Kind | Version key | Publishes to | Consumes | Sends a platform candidate |
+| --- | --- | --- | --- | --- | --- | --- |
+| Qilletni | `qilletni-core` | `maven` | `qilletniVersion` | Maven Central | — | No |
+| QilletniPackageUtility | `qilletni-pkgutil` | `maven` | `pkgutilVersion` | Maven Central | — | No |
+| QilletniDocgen | `qilletni-docgen` | `maven` | `qilletniDocgenVersion` | Maven Central | `qilletni-core` | No |
+| QilletniToolchain | `qilletni-toolchain` | `cli` | `toolchainVersion` | GitHub release | `qilletni-core`, `qilletni-pkgutil`, `qilletni-docgen` | Yes |
+| QPMCLI | `qpm` | `cli` | `qpmVersion` | GitHub release | `qilletni-core`, `qilletni-pkgutil` | Yes |
 
-- **`tag-release`** (every push to `master`): inspects the just-pushed `qilletniVersion`.
-  - If it is still a `-SNAPSHOT`, this is an ordinary commit; nothing is tagged.
-  - Otherwise, it must be exactly the merge of a release-preparation PR: the
-    `release/pending-release.json` marker is required and validated against the version, and
-    the merge commit's originating PR is fetched from the GitHub API and checked
-    (`check-merge-provenance`) so an unrelated PR can't forge a release by carrying a stray
-    marker file. Once validated, it **idempotently** creates (or, if it already exists at this
-    exact commit, no-ops on) the immutable `vX.Y.Z` tag - no maintainer ever has to push a tag
-    by hand. A direct tag push remains supported only as a manual recovery path if this
-    automation ever fails, and is likewise idempotent.
-- **`publish-snapshot`** (every push to `master`, kept as its own job so a stable release
-  merge is never mistaken for a snapshot): publishes to Sonatype's Maven Central snapshot
-  repository whenever the version is still a `-SNAPSHOT`, unchanged from before.
-- **`build-and-publish`** (triggered only by the `vX.Y.Z` tag push produced above):
-  1. Validates the tag matches the (single) `qilletniVersion` and that root/API agree, and
-     that the resolved dependency graph contains no SNAPSHOT/dynamic versions
-     (`checkNoSnapshotDependencies`).
-  2. Determines the previous published version from Maven Central's `maven-metadata.xml`.
-  3. Determines the japicmp policy tier for this release, preferring the release
-     marker's recorded bump kind over re-classifying the version jump, then runs the japicmp
-     public-API compatibility gate for both `qilletni` and `qilletni-api`
-     (`tools/release/src/japicmp_policy.ts`):
-     - **patch**: rejects *any* additive or breaking public API change.
-     - **minor**: rejects breaking changes; additive changes are allowed.
-     - **major**: breaking changes are allowed only if `docs/migrations/X.Y.Z.md` exists.
-  4. Generates a CycloneDX JSON SBOM for each artifact.
-  5. Publishes to Maven Central inside the protected `production-release` GitHub Environment,
-     then polls Maven Central until both artifacts are confirmed available.
-  6. Deploys Javadocs, creates the GitHub Release with the extracted release notes and the
-     two SBOMs attached as assets.
-- **`dispatch`** (after `build-and-publish`): sends a single dependency-update dispatch -
-  listing *both* the core and API artifacts - to every consumer repository registered for
-  `qilletni-core` in `release/components.yml`, via a GitHub App installation token narrowly
-  scoped to that single consumer repository.
-- **`snapshot-followup`** (after `dispatch`): opens a follow-up PR bumping `qilletniVersion`
-  to `X.Y.(Z+1)-SNAPSHOT`, so `master` immediately resumes snapshot publishing. Also opened
-  via a GitHub App token and `peter-evans/create-pull-request@v8`, and never auto-merges.
+Each repository keeps its version key in `gradle.properties`. The consumer lists come from
+`release/components.yml`.
 
-### Caller contract for consumer repositories
+Qilletni publishes two artifacts from one version, `qilletniVersion`:
+`dev.qilletni.impl:qilletni` (core) and `dev.qilletni.api:qilletni-api` (API). They always
+release together, as the one component `qilletni-core`.
 
-Repositories consuming a Qilletni-produced component receive a `repository_dispatch`
-event named `qilletni-dependency-release` with this exact JSON `client_payload` (see
-`tools/release/README.md`):
+## Prepare a release
+
+1. Write the changes for this release in the `## [Unreleased]` section of `CHANGELOG.md`.
+   **(manual)**
+2. For a major bump, write the migration guide `docs/migrations/X.Y.Z.md`. Use the new
+   version as the file name. **(manual)**
+3. Run the `Release - Prepare` workflow on `master`. Select `patch`, `minor` or `major`.
+   **(manual)**
+
+<details>
+    <summary>What does this do?</summary>
+
+The workflow calls `reusable-release-prepare.yml` in this repository. It does these steps:
+
+- It calculates the next version from the latest stable `vX.Y.Z` tag. It does not use the
+  version file, because that file already has the next `-SNAPSHOT` version. For example,
+  `1.0.2-SNAPSHOT` with a `patch` bump gives `1.0.2`, not `1.0.3`.
+- It stops if the `## [Unreleased]` section is empty.
+- It stops if the bump is `major` and `docs/migrations/X.Y.Z.md` does not exist.
+- It runs `./gradlew clean test`, and stops if a test fails.
+- It writes the new version to the version key.
+- It moves the `Unreleased` entries to a new `## [X.Y.Z] - <date>` section.
+- It writes the release marker `release/pending-release.json`. The marker records the
+  component, the old version, the new version and the bump.
+- It opens the release PR.
+
+</details>
+
+4. Examine the release PR. Make sure that the version and the changelog are correct.
+   Then merge the release PR. **(manual)**
+
+<details>
+    <summary>Why is this safe?</summary>
+
+- The workflow signs the release PR and adds the `release` label.
+- No workflow merges the release PR. Only the maintainer can merge it.
+- The workflow uses a GitHub App token that can only write to this one repository.
+
+</details>
+
+### Select the bump
+
+The japicmp gate compares the public API with the last release. It uses the bump that the
+maintainer selects.
+
+| Bump | The japicmp gate stops the release if |
+| --- | --- |
+| `patch` | the public API has a change of any type |
+| `minor` | the public API has an incompatible change |
+| `major` | the public API has an incompatible change and `docs/migrations/X.Y.Z.md` does not exist |
+
+Not all repositories use the japicmp gate. Refer to the `RELEASE.md` of each repository.
+
+## Publish a release
+
+When the maintainer merges the release PR, the workflow `Publish Release` starts. The
+maintainer does not start it.
+
+1. The `tag-release` job creates the `vX.Y.Z` tag on the merge commit.
+
+<details>
+    <summary>Why is this safe?</summary>
+
+- The job runs for each push to `master`. If the version is a `-SNAPSHOT`, the job does
+  not create a tag.
+- If the version is not a `-SNAPSHOT`, the job requires the release marker
+  `release/pending-release.json`. It makes sure that the marker agrees with the version.
+- The job gets the merge commit's pull request from the GitHub API
+  (`check-merge-provenance`). The pull request must be a merged release PR with the
+  `release` label. A different pull request cannot start a release with a copy of the
+  marker.
+- If the tag already exists on this commit, the job does nothing.
+- If the tag already exists on an earlier commit, the job treats the push as an ordinary
+  commit. This occurs before the snapshot PR merges. A release tag never moves.
+
+</details>
+
+2. The `build-and-publish` job starts from the new tag. It publishes the release to Maven
+   Central and creates the GitHub release.
+
+<details>
+    <summary>What does this do?</summary>
+
+The job does these steps:
+
+1. It makes sure that the tag agrees with the version, and that core and API have the same
+   version.
+2. It stops if a dependency has a `-SNAPSHOT` or dynamic version
+   (`checkNoSnapshotDependencies`).
+3. It gets the last published version from Maven Central.
+4. It runs the japicmp gate for `qilletni` and `qilletni-api`. It uses the bump from the
+   release marker. Refer to [Select the bump](#select-the-bump).
+5. It makes a CycloneDX SBOM for each artifact.
+6. It publishes the artifacts to Maven Central. The Central Portal publishes the
+   deployment automatically, because `gradle.properties` sets
+   `mavenCentralAutomaticPublishing=true`.
+7. It waits until both artifacts are available on Maven Central
+   (`Poll Maven Central for propagation`). This usually takes 10 to 30 minutes.
+8. It publishes the Javadocs.
+9. It creates the GitHub release with the release notes from `CHANGELOG.md`. It attaches
+   the two SBOMs, `qilletni-core-bom.json` and `qilletni-api-bom.json`.
+
+The job uses the `production-release` environment. At this time, the environment has no
+approval rule.
+
+</details>
+
+<details>
+    <summary>What if this step fails?</summary>
+
+- **The japicmp gate stops the release.** The public API has a change that the bump does
+  not permit. Select a larger bump and prepare the release again. Or remove the API change.
+- **`Poll Maven Central for propagation` does not finish.** Sign in to the
+  [Central Portal](https://central.sonatype.com/publishing/deployments). Examine the
+  deployment. If the Portal did not accept the deployment, it shows the reason.
+- **A step after the Maven Central publish fails.** Do not run the job again. Maven
+  Central does not accept the same version two times. Do the other steps of the job
+  manually. The job log shows the commands.
+- **The `tag-release` job did not create the tag.** Push the tag manually as a recovery:
+  `git tag vX.Y.Z <merge-commit>`, then `git push origin refs/tags/vX.Y.Z`.
+
+</details>
+
+3. The `snapshot-followup` job opens the snapshot PR. The PR sets the next `-SNAPSHOT`
+   version and removes the release marker. Merge the snapshot PR. **(manual)**
+
+<details>
+    <summary>What if this step fails?</summary>
+
+Until the snapshot PR merges, `master` has a stable version and the release marker. The
+`tag-release` job then does not create a tag for other commits, because the tag already
+exists. But `master` publishes no snapshots. Merge the snapshot PR soon after the release.
+
+</details>
+
+## Update the consumer repositories
+
+1. The `dispatch` job sends a `qilletni-dependency-release` event to each consumer
+   repository in `release/components.yml`.
+
+<details>
+    <summary>What is the exact payload?</summary>
 
 ```json
 {
   "component": "qilletni-core",
-  "version": "1.1.0",
-  "commit": "<40-char sha>",
+  "version": "X.Y.Z",
+  "commit": "<40-character commit SHA>",
   "repository": "Qilletni/Qilletni",
   "artifacts": [
-    {"coordinates": "dev.qilletni.impl:qilletni:1.1.0", "sha256": "<64-char hex>"},
-    {"coordinates": "dev.qilletni.api:qilletni-api:1.1.0", "sha256": "<64-char hex>"}
+    {"coordinates": "dev.qilletni.impl:qilletni:X.Y.Z", "sha256": "<64-character hex>"},
+    {"coordinates": "dev.qilletni.api:qilletni-api:X.Y.Z", "sha256": "<64-character hex>"}
   ]
 }
 ```
 
-A consumer's small local caller workflow (copy of
-`tools/release/examples/dependency-update.yml`) just receives that event and forwards it,
-with its own App credentials, to the central `reusable-dependency-update.yml`, which:
+The job sends one event to each consumer repository. Each event uses a GitHub App token
+that can only write to that one consumer repository.
 
-1. Declares which upstream components it accepts in its own `.qilletni/release.yml`
-   `dependencies` list: each entry pins the exact allowed `group:artifact` coordinate set
-   for one `upstream_component` (and its expected `repository`) to a single local
-   `version_file`/`version_key` (multiple coordinates - e.g. core+API - may map to one key).
-   A coordinate may be marked `resolved: false` (e.g. QPM, which only puts the API half of
-   the core+API unit on its own classpath) to stay mandatory/hash-verified/version-coupled
-   while being excluded from the resolved-dependency-graph check in step 4 below.
-2. Validates the payload's `component`/`repository`/coordinate-set/version against that
-   mapping - rejecting a spoofed producer, a missing/extra coordinate, a divergent
-   per-artifact version, or a `-SNAPSHOT`/dynamic version - **before touching anything**.
-3. Re-downloads (streamed) and hash-verifies every artifact against Maven Central.
-4. Applies the update to *only* the one configured `version_file`/`version_key`
-   (idempotent: a no-op if already at that version), refreshes Gradle dependency locks
-   (sibling composite builds explicitly disabled), runs the consumer's full test suite
-   plus its own `checkNoSnapshotDependencies` guard, and confirms the resolved dependency
-   graph actually contains the requested version(s).
-5. Opens a signed PR via a repository-scoped GitHub App token. **That PR never
-   auto-merges**; a maintainer decides whether, and with what bump, to release the
-   consumer afterwards.
+</details>
 
-### Authentication
+2. In each consumer repository, the `Dependency Update` workflow opens a dependency PR.
 
-Cross-repository dispatch, and every PR this automation opens (release-preparation,
-dependency-update, snapshot follow-up), authenticate as a GitHub App (organization secrets
-`QILLETNI_RELEASE_APP_ID` / `QILLETNI_RELEASE_APP_PRIVATE_KEY`) via
-`actions/create-github-app-token@v3`. Each token is requested scoped to exactly one target
-repository (`repositories: <single-repo-name>`), never a broad, org-wide token.
+<details>
+    <summary>What does this do?</summary>
 
-### Platform releases (Docker)
+The workflow calls `reusable-dependency-update.yml` in this repository. It does these
+steps:
 
-Preparing which Toolchain/QPM composition a platform release will pin is a two-stage,
-fully reviewed process; Docker publication itself remains manual and unrelated to
-individual component versions:
+1. It compares the event with the `dependencies` list in the consumer's
+   `.qilletni/release.yml`. It stops if the producer, the repository, the coordinates or
+   the version do not agree. It does this before it changes a file.
+2. It downloads each artifact from Maven Central and makes sure that its SHA-256 agrees
+   with the event.
+3. It writes the new version to the one version key that `.qilletni/release.yml` names.
+4. It refreshes the Gradle dependency locks in all projects.
+5. It runs `./gradlew clean test checkNoSnapshotDependencies`.
+6. It makes sure that the resolved dependency graph contains the new version. A coordinate
+   with `resolved: false` is not part of this check. That coordinate is still required and
+   its SHA-256 is still checked, but it is not on the consumer's classpath.
+7. It opens a signed dependency PR.
 
-1. **Candidate staging** (`release/platform/candidates.yml`, automatic but PR-reviewed):
-   right after QilletniToolchain or QPMCLI publishes, its own workflow sends this
-   repository a `repository_dispatch` event named `qilletni-platform-component-release`
-   (payload schema in `tools/release/src/release_event.ts`):
+</details>
 
-   ```json
-   {
-     "schema_version": 1,
-     "component": "toolchain",
-     "repository": "Qilletni/QilletniToolchain",
-     "version": "1.0.2",
-     "tag": "v1.0.2",
-     "commit": "<40-char sha>",
-     "asset": "qilletni-1.0.2.tar.gz",
-     "sha256": "<64-char hex>",
-     "embeds": {"core": "1.0.2", "api": "1.0.1", "pkgutil": "1.0.1", "docgen": "1.0.1"}
-   }
-   ```
+3. Examine each dependency PR, then merge it. **(manual)**
+4. Decide if each consumer repository needs a release. A merged dependency PR does not
+   release the consumer repository. If a release is necessary, do
+   [Prepare a release](#prepare-a-release) in that repository. **(manual)**
 
-   `platform-candidate-dispatch.yml` schema-validates the event, re-verifies its
-   `tag`/`commit`/`asset`/`sha256` claims live against the GitHub API, updates *only*
-   the named component's entry in `candidates.yml` (refusing a `repository` that
-   disagrees with that component's already-recorded one), and opens a signed PR via a
-   GitHub App token. **This PR never auto-merges.**
-2. **Platform release preparation** (`platform-prepare.yml`, manual `workflow_dispatch`
-   with a required `patch`/`minor`/`major` `bump` choice): computes the next platform
-   version from the **latest existing `release/platform/X.Y.Z.yml` file** (never from an
-   individual component's version - a platform bump is its own, user-visible
-   distribution decision), refuses to run if that manifest already exists, re-verifies
-   `candidates.yml` live one more time, then copies it unchanged into the new manifest
-   and opens its own signed, never-auto-merging PR.
+## Release the platform
 
-Docker publication remains manual, on this repository, and unrelated to individual
-component versions:
+A platform release is one reviewed set of a QilletniToolchain release and a QPMCLI release.
+The Docker image and the CLI installer both use it. A platform version is a distribution
+decision. It does not come from a component version.
 
-- **Snapshot**: fetches the latest `snapshot` commit SHAs from QilletniToolchain and
-  QPMCLI, and resolves each one's release asset URL live off the same mutable `snapshot`
-  release (the asset is named for the version that produced it - e.g.
-  `qilletni-1.0.2-SNAPSHOT.tar.gz` - so it cannot be hardcoded), then tags the image
-  `snapshot` plus the immutable `<toolchain_sha>-<qpm_sha>` commit-pair. Unlike a release
-  build, a snapshot asset is not hash-pinned.
-- **Release**: takes a single `platform_version` input (e.g. `1.0.0`), matching
-  `release/platform/X.Y.Z.yml`. That manifest pins the exact Toolchain/QPM release asset
-  name, SHA-256, tagged commit, and embedded component versions for the platform version;
-  the workflow re-verifies the asset hashes and re-derives each component's commit from its
-  live tag against the live GitHub API immediately before building (and cross-checks a
-  published per-component manifest artifact instead, when one exists), and the `Dockerfile`
-  itself re-verifies the asset hashes again at download time. The image is built and pushed
-  to the immutable `X.Y.Z` tag first - labelled with the platform manifest's SHA-256, the
-  triggering source commit, and the Toolchain/QPM/core versions and commits - refusing to
-  overwrite an existing `X.Y.Z` tag whose labels disagree with this build's provenance (a
-  matching re-run is treated as an idempotent no-op instead). Only once that immutable build
-  has succeeded are the floating `X.Y`/`X`/`latest` tags re-pointed at the same image, with
-  build provenance and an SBOM attached throughout.
+```mermaid
+flowchart TD
+    A["Toolchain or QPMCLI release"] --> B{{"Manual: merge the candidate PR"}}
+    B --> C{{"Manual: run Platform - Prepare"}}
+    C --> D{{"Manual: merge the platform PR"}}
+    D --> E{{"Manual: run the Docker build"}}
+```
 
-### CLI installs
+1. After a QilletniToolchain or QPMCLI release, the workflow opens a candidate PR in this
+   repository. Examine the candidate PR, then merge it. **(manual)**
 
-Platform manifests are not only a Docker input: `install/install.sh` (served via
-`https://install.qilletni.dev/`, which redirects to the copy of that file on `master`) is
-the end-user installer, and it installs a platform version too. It reads
-`release/platform/stable` to resolve `latest`, then reads that version's manifest and
-verifies each downloaded asset against the `sha256` recorded there - so a CLI install and
-the Docker image of the same platform version are the same reviewed, hash-pinned
-composition.
+<details>
+    <summary>What does this do?</summary>
 
-`release/platform/stable` is written by `platform-prepare.yml` in the same reviewed PR that
-creates the manifest, so **merging a platform-release PR is what makes that version the
-default for new installs**. It can only ever name a stable `X.Y.Z`. That workflow is its
-only writer and is reachable only from a released component (`platform-dispatch` needs
-`build-and-publish`, which is tag-only), and refuses a non-release version outright.
+- The platform candidate job in QilletniToolchain and QPMCLI sends a
+  `qilletni-platform-component-release` event to this repository. Each repository gives
+  the job a different name. Refer to the `RELEASE.md` of that repository.
+- The `Platform Candidate Dispatch` workflow examines the event against the live GitHub
+  API. It makes sure that the tag, the commit, the asset and the SHA-256 are correct.
+- The workflow changes only the entry for that component in
+  `release/platform/candidates.yml`. It stops if the event names a different repository
+  than the entry.
+- The workflow opens a signed candidate PR.
 
-Installs are laid out one directory per component
-(`~/.qilletni/platforms/X.Y.Z/{toolchain,qpm}`, symlinked into `~/.qilletni/bin`), which the
-Dockerfile mirrors. Both release archives are flat and both contain a
-`component-manifest.json`, so they must never be unpacked into a shared directory.
+</details>
 
-Unlike everything else described here, the installer has no release gate - it is served
-from `master`, so a change to it is live for new users as soon as it merges.
+<details>
+    <summary>What is the exact payload?</summary>
 
-See `release/components.yml` for the release-producer/consumer registry,
-`release/platform/candidates.yml` for the mutable, PR-reviewed staging file,
-`release/platform/X.Y.Z.yml` for immutable platform manifests, and
-`release/platform/stable` for the version new CLI installs get.
+```json
+{
+  "schema_version": 1,
+  "component": "toolchain",
+  "repository": "Qilletni/QilletniToolchain",
+  "version": "X.Y.Z",
+  "tag": "vX.Y.Z",
+  "commit": "<40-character commit SHA>",
+  "asset": "qilletni-X.Y.Z.tar.gz",
+  "sha256": "<64-character hex>",
+  "embeds": {"core": "X.Y.Z", "api": "X.Y.Z", "pkgutil": "X.Y.Z", "docgen": "X.Y.Z"}
+}
+```
+
+The schema is in `tools/release/README.md`.
+
+</details>
+
+2. Run the `Platform - Prepare Release` workflow. Select `patch`, `minor` or `major`.
+   **(manual)**
+
+<details>
+    <summary>What does this do?</summary>
+
+- The workflow calculates the next platform version from the latest
+  `release/platform/X.Y.Z.yml` file.
+- It stops if that manifest already exists.
+- It examines `release/platform/candidates.yml` against the live GitHub API again.
+- It copies the candidates, without a change, to the new manifest
+  `release/platform/X.Y.Z.yml`.
+- It writes the new version to `release/platform/stable`.
+- It opens a signed platform PR.
+
+</details>
+
+3. Examine the platform PR, then merge it. **(manual)**
+
+> [!IMPORTANT]
+> The merge makes this platform version the default for new CLI installs, because it
+> changes `release/platform/stable`.
+
+4. Run the `Build and Publish Docker Image` workflow. Select `release` and enter the
+   platform version. **(manual)**
+
+<details>
+    <summary>What does this do?</summary>
+
+**Release mode** builds one platform version:
+
+1. The workflow reads `release/platform/X.Y.Z.yml`.
+2. It examines the asset SHA-256 values and the tag commits against the live GitHub API.
+3. The `Dockerfile` examines the asset SHA-256 values again when it downloads them.
+4. The workflow pushes the image to the `X.Y.Z` tag. The image labels record the manifest
+   SHA-256, the source commit and the component versions.
+5. Then it moves the `X.Y`, `X` and `latest` tags to the same image.
+
+**Snapshot mode** builds the latest `snapshot` releases of QilletniToolchain and QPMCLI.
+It tags the image `snapshot` and `<toolchain_sha>-<qpm_sha>`. A snapshot asset has no
+SHA-256 check.
+
+</details>
+
+<details>
+    <summary>Why is this safe?</summary>
+
+- The workflow pushes the immutable `X.Y.Z` tag first. It moves the other tags only after
+  that push.
+- If an `X.Y.Z` image already exists with different labels, the workflow stops. If the
+  labels agree, the workflow does nothing.
+
+</details>
+
+## Publish a library package
+
+The library packages `qilletni-lib-std` and `qilletni-spotify` publish to QPM, not to Maven
+Central. They have no prepare workflow and no release PR.
+
+> [!WARNING]
+> A tag push publishes the package immediately. No person examines the release first.
+> Before the tag push, make sure that `master` has the correct package version.
+
+1. Push a tag for the package. **(manual)**
+   - For `qilletni-lib-std`, push `std-vX.Y.Z`.
+   - For `qilletni-spotify`, push `spotify-vX.Y.Z`.
+
+<details>
+    <summary>What does this do?</summary>
+
+- The tag starts `publish_std_lib.yml` or `publish_spotify.yml`.
+- The workflow builds the package with `qilletni build`, then publishes it with
+  `qpm publish`.
+- The workflow sends an `update-docs` event to `Qilletni/qilletni-package-docs`. That
+  repository then updates the package documentation.
+- The workflow runs in the `ghcr.io/qilletni/qilletni:1.0.0` container. This version is
+  fixed in the workflow. A platform release does not change it.
+- `publish_spotify.yml` can also run manually, for a snapshot version.
+
+</details>
+
+## Install the CLI
+
+`install/install.sh` installs a platform version. The URL `https://install.qilletni.dev/`
+sends the installer from `master`.
+
+1. The installer reads `release/platform/stable` to find the `latest` version.
+2. It reads the manifest `release/platform/X.Y.Z.yml` for that version.
+3. It downloads each asset and makes sure that its SHA-256 agrees with the manifest.
+
+A CLI install and the Docker image of one platform version contain the same components.
+
+> [!CAUTION]
+> The installer has no release gate. A change to `install/install.sh` is live for new
+> users when it merges to `master`.
+
+> [!CAUTION]
+> Do not unpack the QilletniToolchain archive and the QPMCLI archive into one directory.
+> Both archives contain `component-manifest.json`. The installer puts each component in
+> its own directory: `~/.qilletni/platforms/X.Y.Z/toolchain` and
+> `~/.qilletni/platforms/X.Y.Z/qpm`. It links both into `~/.qilletni/bin`.
+
+## Reference
+
+### Secrets
+
+The release workflows use these organization secrets.
+
+| Secret | Used for |
+| --- | --- |
+| `QILLETNI_RELEASE_APP_ID` | The GitHub App for tags, events and PRs |
+| `QILLETNI_RELEASE_APP_PRIVATE_KEY` | The GitHub App for tags, events and PRs |
+| `MAVEN_CENTRAL_USERNAME` | The Maven Central publish |
+| `MAVEN_CENTRAL_PASSWORD` | The Maven Central publish |
+| `SIGNING_KEY` | The artifact signatures |
+| `SIGNING_PASSWORD` | The artifact signatures |
+| `DISPATCH_PAT` | The `update-docs` event from the library package workflows |
+
+Each GitHub App token can write to only one repository.
+
+### Release files
+
+| File | Written by | Used by |
+| --- | --- | --- |
+| `.qilletni/release.yml` | the maintainer | all release workflows in the repository |
+| `release/components.yml` | the maintainer | the `dispatch` job |
+| `release/pending-release.json` | `Release - Prepare` | `tag-release`, `build-and-publish` |
+| `release/platform/candidates.yml` | `Platform Candidate Dispatch` | `Platform - Prepare Release` |
+| `release/platform/X.Y.Z.yml` | `Platform - Prepare Release` | the Docker build, the installer |
+| `release/platform/stable` | `Platform - Prepare Release` | the installer |
+
+### Release tool
+
+The release workflows use a TypeScript command-line tool in `tools/release`. It is a
+submodule of [`Qilletni/ReleaseTooling`](https://github.com/Qilletni/ReleaseTooling). For
+the commands and the schemas, refer to `tools/release/README.md`.
+
+<!--
+Maintain this document and the RELEASE.md in each producer repository with this rule.
+
+Copy a shared fact into another repository's RELEASE.md only if both are true:
+  (a) a maintainer needs the fact to do the next step without leaving that page, and
+  (b) the fact changes less often than the document.
+If a fact passes (a) but not (b), put it only in the "This repository" table of that page.
+
+Each other RELEASE.md contains: the component and kind; the version file and key; what it
+publishes and where; the snapshot channel; its real job names; its manual steps; its
+upstream components and version keys, or "none"; its platform candidate job, if any; its
+japicmp gate, if any; its lockfiles and the commands to refresh them; its bump table.
+
+Only this document contains: the reusable workflow steps; the event payloads; the
+components registry; the consumer checks, including `resolved: false`; the platform
+release; the Docker build; the installer; the secrets; the release tooling paths; the
+list of all producer repositories.
+
+Use the real job name of each repository only in that repository's RELEASE.md. In this
+document, name the role of a job in another repository, not its name.
+-->
