@@ -90,7 +90,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+          client-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
           private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
           owner: Qilletni
           repositories: Qilletni

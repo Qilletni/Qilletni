@@ -111,14 +111,14 @@ jobs:
         uses: actions/create-github-app-token@v3
         id: app-token-toolchain
         with:
-          app-id: ${{ secrets.app-id }}
+          client-id: ${{ secrets.app-id }}
           private-key: ${{ secrets.app-private-key }}
           owner: Qilletni
           repositories: QilletniToolchain
 
       - name: Repository dispatch - QilletniToolchain
         if: steps.app-token-toolchain.outputs.token != ''
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ steps.app-token-toolchain.outputs.token }}
           repository: Qilletni/QilletniToolchain
@@ -130,14 +130,14 @@ jobs:
         uses: actions/create-github-app-token@v3
         id: app-token-qpm
         with:
-          app-id: ${{ secrets.app-id }}
+          client-id: ${{ secrets.app-id }}
           private-key: ${{ secrets.app-private-key }}
           owner: Qilletni
           repositories: QPMCLI
 
       - name: Repository dispatch - QPMCLI
         if: steps.app-token-qpm.outputs.token != ''
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ steps.app-token-qpm.outputs.token }}
           repository: Qilletni/QPMCLI
@@ -149,14 +149,14 @@ jobs:
         uses: actions/create-github-app-token@v3
         id: app-token-pkgutil
         with:
-          app-id: ${{ secrets.app-id }}
+          client-id: ${{ secrets.app-id }}
           private-key: ${{ secrets.app-private-key }}
           owner: Qilletni
           repositories: QilletniPackageUtility
 
       - name: Repository dispatch - QilletniPackageUtility
         if: steps.app-token-pkgutil.outputs.token != ''
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ steps.app-token-pkgutil.outputs.token }}
           repository: Qilletni/QilletniPackageUtility
@@ -168,14 +168,14 @@ jobs:
         uses: actions/create-github-app-token@v3
         id: app-token-docgen
         with:
-          app-id: ${{ secrets.app-id }}
+          client-id: ${{ secrets.app-id }}
           private-key: ${{ secrets.app-private-key }}
           owner: Qilletni
           repositories: QilletniDocgen
 
       - name: Repository dispatch - QilletniDocgen
         if: steps.app-token-docgen.outputs.token != ''
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ steps.app-token-docgen.outputs.token }}
           repository: Qilletni/QilletniDocgen

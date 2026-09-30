@@ -117,7 +117,7 @@ jobs:
         if: steps.detect.outputs.is_release_merge == 'true'
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+          client-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
           private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
@@ -367,7 +367,7 @@ jobs:
           publish_dir: qilletni-api/build/docs/javadoc
 
       - name: Extract release notes
-        uses: ffurrer2/extract-release-notes@v2
+        uses: ffurrer2/extract-release-notes@v3
         with:
           changelog_file: CHANGELOG.md
           release_notes_file: RELEASE_NOTES.md
