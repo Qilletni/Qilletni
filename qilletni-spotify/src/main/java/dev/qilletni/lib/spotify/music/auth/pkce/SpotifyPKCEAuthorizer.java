@@ -265,7 +265,7 @@ public class SpotifyPKCEAuthorizer implements SpotifyAuthorizer {
 
         var authorizationCodeCredentials = authorizationCodePKCERefreshRequest.execute();
 
-        var authCodeCredentials = AuthCodeCredentials.from(authorizationCodeCredentials);
+        var authCodeCredentials = AuthCodeCredentials.from(authorizationCodeCredentials, spotifyApi.getRefreshToken());
         refreshTokens(authCodeCredentials);
 
         packageConfig.set(CACHED_CREDS_NAME, authCodeCredentials.refreshToken());
@@ -309,8 +309,9 @@ public class SpotifyPKCEAuthorizer implements SpotifyAuthorizer {
     }
 
     public record AuthCodeCredentials(String accessToken, String refreshToken, int expiresIn) {
-        static AuthCodeCredentials from(AuthorizationCodeCredentials authorizationCodeCredentials) {
-            return new AuthCodeCredentials(authorizationCodeCredentials.getAccessToken(), authorizationCodeCredentials.getRefreshToken(), authorizationCodeCredentials.getExpiresIn());
+        static AuthCodeCredentials from(AuthorizationCodeCredentials authorizationCodeCredentials, String previousRefreshToken) {
+            var refreshToken = authorizationCodeCredentials.getRefreshToken() != null ? authorizationCodeCredentials.getRefreshToken() : previousRefreshToken;
+            return new AuthCodeCredentials(authorizationCodeCredentials.getAccessToken(), refreshToken, authorizationCodeCredentials.getExpiresIn());
         }
 
         public static AuthCodeCredentials fromRefreshToken(String refreshToken) {
