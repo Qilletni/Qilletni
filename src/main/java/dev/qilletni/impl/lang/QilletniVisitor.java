@@ -35,18 +35,7 @@ import dev.qilletni.api.lang.types.weights.WeightUnit;
 import dev.qilletni.api.lang.types.weights.WeightUtils;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
-import dev.qilletni.impl.lang.exceptions.CannotTypeCheckAnyException;
-import dev.qilletni.impl.lang.exceptions.CascadeFailedException;
-import dev.qilletni.impl.lang.exceptions.FunctionDidntReturnException;
-import dev.qilletni.impl.lang.exceptions.InternalLanguageException;
-import dev.qilletni.impl.lang.exceptions.InvalidConstructor;
-import dev.qilletni.impl.lang.exceptions.InvalidStaticException;
-import dev.qilletni.impl.lang.exceptions.InvalidSyntaxException;
-import dev.qilletni.impl.lang.exceptions.ListOutOfBoundsException;
-import dev.qilletni.impl.lang.exceptions.ListTransformerNotFoundException;
-import dev.qilletni.impl.lang.exceptions.QilletniContextException;
-import dev.qilletni.impl.lang.exceptions.TypeMismatchException;
-import dev.qilletni.impl.lang.exceptions.SymbolNotFoundException;
+import dev.qilletni.impl.lang.exceptions.*;
 import dev.qilletni.impl.lang.internal.BackgroundTaskExecutorImpl;
 import dev.qilletni.impl.lang.internal.FunctionInvokerImpl;
 import dev.qilletni.impl.lang.internal.NativeFunctionHandler;
@@ -1449,23 +1438,29 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         } else {
             playingNode = visitQilletniTypedNode(ctx.expr());
         }
-        
-        if (playingNode instanceof SongType song) {
-            musicPopulator.populateSong(song);
-            trackOrchestrator.playTrack(song.getTrack());
-            return null;
-        }
 
-        var collection = (CollectionType) playingNode;
-
-        musicPopulator.populateCollection(collection);
-        if (ctx.collection_limit() != null) {
-            CollectionLimit limit = visitNode(ctx.collection_limit());
-            LOGGER.debug("Playing collection {} with a limit of {}", collection, limit);
-            trackOrchestrator.playCollection(collection, limit);
-        } else {
-            LOGGER.debug("Playing collection {}", collection);
-            trackOrchestrator.playCollection(collection, ctx.LOOP_PARAM() != null);
+        switch (playingNode) {
+            case SongType song -> {
+                musicPopulator.populateSong(song);
+                trackOrchestrator.playTrack(song.getTrack());
+            }
+            case CollectionType collection -> {
+                musicPopulator.populateCollection(collection);
+                if (ctx.collection_limit() != null) {
+                    CollectionLimit limit = visitNode(ctx.collection_limit());
+                    LOGGER.debug("Playing collection {} with a limit of {}", collection, limit);
+                    trackOrchestrator.playCollection(collection, limit);
+                } else {
+                    LOGGER.debug("Playing collection {}", collection);
+                    trackOrchestrator.playCollection(collection, ctx.LOOP_PARAM() != null);
+                }
+            }
+            case WeightsType weights -> {
+                var trackFromWeights = trackOrchestrator.getTrackFromWeight(weights);
+                LOGGER.debug("Playing selected track from weights: {}", trackFromWeights);
+                trackOrchestrator.playTrack(trackFromWeights);
+            }
+            default -> throw new UnplayableTypeException("Unable to play an instance of type " + playingNode.typeName() + ". Can only play collection, song, or weights");
         }
 
         return null;

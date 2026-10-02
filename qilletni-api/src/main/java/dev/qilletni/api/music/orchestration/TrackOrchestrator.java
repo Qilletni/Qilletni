@@ -1,5 +1,6 @@
 package dev.qilletni.api.music.orchestration;
 
+import dev.qilletni.api.lang.types.AlbumType;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.lang.types.WeightsType;
 import dev.qilletni.api.lang.types.collection.CollectionLimit;
