@@ -1,15 +1,12 @@
 package dev.qilletni.impl.lang.types;
 
-import dev.qilletni.impl.SpotifyDataUtility;
-import dev.qilletni.api.lang.types.AlbumType;
-import dev.qilletni.api.lang.types.EntityType;
-import dev.qilletni.api.lang.types.ListType;
-import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.album.AlbumDefinition;
+import dev.qilletni.api.lang.types.collection.CollectionOrder;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.supplier.DynamicProvider;
+import dev.qilletni.impl.SpotifyDataUtility;
 import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
 public final class AlbumTypeImpl implements AlbumType {
@@ -18,6 +15,8 @@ public final class AlbumTypeImpl implements AlbumType {
     private String url;
     private String title;
     private String artist;
+    private CollectionOrder order = CollectionOrder.SHUFFLE;
+    private WeightsType weights;
     
     private EntityType artistType;
     private ListType artistsType;
@@ -169,5 +168,25 @@ public final class AlbumTypeImpl implements AlbumType {
         }
 
         return "AlbumType{title='%s', artist='%s'}".formatted(album.getName(), album.getArtist().getName());
+    }
+
+    @Override
+    public CollectionOrder getOrder() {
+        return order;
+    }
+
+    @Override
+    public void setOrder(CollectionOrder order) {
+        this.order = order;
+    }
+
+    @Override
+    public WeightsType getWeights() {
+        return weights;
+    }
+
+    @Override
+    public void setWeights(WeightsType weights) {
+        this.weights = weights;
     }
 }

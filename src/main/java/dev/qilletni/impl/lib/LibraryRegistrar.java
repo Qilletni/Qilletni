@@ -10,12 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 public class LibraryRegistrar {
     
@@ -55,7 +50,7 @@ public class LibraryRegistrar {
                             .stream()
                             .map(file -> new AutoImportFile(file, qllInfo.name())).toList());
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOGGER.error("Failed to load library {} v{}", qllInfo.name(), qllInfo.version().getVersionString(), e);
             }
         }

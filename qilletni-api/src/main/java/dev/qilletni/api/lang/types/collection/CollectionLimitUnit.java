@@ -56,6 +56,15 @@ public enum CollectionLimitUnit {
     }
 
     /**
+     * Returns true if the unit is time-based, false otherwise.
+     * 
+     * @return True if the unit is time-based, false otherwise
+     */
+    public boolean isTimeBased() {
+        return timeUnit != null;
+    }
+
+    /**
      * Gets the {@link CollectionLimitUnit} from the given prefix.
      * 
      * @param text The prefix of the unit

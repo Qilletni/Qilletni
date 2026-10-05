@@ -3,7 +3,6 @@ package dev.qilletni.impl.music;
 import dev.qilletni.api.lang.types.AlbumType;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.lang.types.SongType;
-import dev.qilletni.api.lib.persistence.PackageConfig;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lang.exceptions.music.AlbumNotFoundException;
@@ -17,11 +16,20 @@ public class MusicPopulatorImpl implements MusicPopulator {
     private static final Logger LOGGER = LoggerFactory.getLogger(MusicPopulatorImpl.class);
 
     private final DynamicProvider dynamicProvider;
-    private final boolean eagerMusicLoad;
+    private boolean eagerMusicLoad;
 
-    public MusicPopulatorImpl(DynamicProvider dynamicProvider, PackageConfig packageConfig) {
+    public MusicPopulatorImpl(DynamicProvider dynamicProvider) {
         this.dynamicProvider = dynamicProvider;
-        this.eagerMusicLoad = packageConfig.get("eagerMusicLoad").orElse("false").equals("true");
+    }
+
+    @Override
+    public void setEagerMusicLoad(boolean eagerMusicLoad) {
+        this.eagerMusicLoad = eagerMusicLoad;
+    }
+
+    @Override
+    public boolean getEagerMusicLoad() {
+        return eagerMusicLoad;
     }
 
     @Override

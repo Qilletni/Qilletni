@@ -1,7 +1,6 @@
 package dev.qilletni.lib.core;
 
 import dev.qilletni.api.lang.internal.FunctionInvoker;
-import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.list.ListInitializer;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
@@ -12,13 +11,16 @@ import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.factories.CollectionStateFactory;
 import dev.qilletni.api.music.factories.SongTypeFactory;
-import dev.qilletni.api.music.orchestration.CollectionState;
+import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.api.music.orchestration.TrackOrchestrator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @NativeOn("collection")
@@ -37,7 +39,7 @@ public class CollectionFunctions {
 
     // TODO: Yeah this will probably (definitely) cause memory leaks
     //       Better fix this later or figure out a better way
-    private static final Map<CollectionType, CollectionState> collectionStates = new HashMap<>();
+    private static final Map<CollectionType, OrderableTypeState> collectionStates = new HashMap<>();
 
     public CollectionFunctions(MusicPopulator musicPopulator, EntityDefinitionManager entityDefinitionManager, FunctionInvoker functionInvoker, SongTypeFactory songTypeFactory, DynamicProvider dynamicProvider, CollectionStateFactory collectionStateFactory, ListInitializer listInitializer) {
         this.musicPopulator = musicPopulator;
@@ -129,7 +131,7 @@ public class CollectionFunctions {
         var state = collectionStates.computeIfAbsent(collectionType, _ ->
                 collectionStateFactory.createFromCollection(collectionType));
 
-        return songTypeFactory.createSongFromTrack(trackOrchestrator.getTrackFromCollection(state));
+        return songTypeFactory.createSongFromTrack(trackOrchestrator.getTrackFromOrderableType(state));
     }
 
     public ListType getSongs(CollectionType collectionType) {

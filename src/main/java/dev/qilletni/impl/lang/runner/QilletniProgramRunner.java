@@ -1,19 +1,9 @@
 package dev.qilletni.impl.lang.runner;
 
-import dev.qilletni.impl.antlr.QilletniLexer;
-import dev.qilletni.impl.antlr.QilletniParser;
 import dev.qilletni.api.lang.stack.QilletniStackTrace;
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.table.SymbolTable;
-import dev.qilletni.api.lang.types.BooleanType;
-import dev.qilletni.api.lang.types.DoubleType;
-import dev.qilletni.api.lang.types.EntityType;
-import dev.qilletni.api.lang.types.ImportAliasType;
-import dev.qilletni.api.lang.types.IntType;
-import dev.qilletni.api.lang.types.JavaType;
-import dev.qilletni.api.lang.types.ListType;
-import dev.qilletni.api.lang.types.QilletniType;
-import dev.qilletni.api.lang.types.StringType;
+import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.conversion.TypeConverter;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.entity.EntityInitializer;
@@ -22,6 +12,8 @@ import dev.qilletni.api.lib.persistence.PackageConfig;
 import dev.qilletni.api.lib.qll.QllInfo;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
+import dev.qilletni.impl.antlr.QilletniLexer;
+import dev.qilletni.impl.antlr.QilletniParser;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.docs.exceptions.DocErrorListener;
 import dev.qilletni.impl.lang.exceptions.QilletniNativeInvocationException;
@@ -35,14 +27,7 @@ import dev.qilletni.impl.lang.internal.debug.DebugSupportImpl;
 import dev.qilletni.impl.lang.stack.QilletniStackTraceImpl;
 import dev.qilletni.impl.lang.table.ScopeImpl;
 import dev.qilletni.impl.lang.table.SymbolTableImpl;
-import dev.qilletni.impl.lang.types.BooleanTypeImpl;
-import dev.qilletni.impl.lang.types.DoubleTypeImpl;
-import dev.qilletni.impl.lang.types.EntityTypeImpl;
-import dev.qilletni.impl.lang.types.ImportAliasTypeImpl;
-import dev.qilletni.impl.lang.types.IntTypeImpl;
-import dev.qilletni.impl.lang.types.JavaTypeImpl;
-import dev.qilletni.impl.lang.types.ListTypeImpl;
-import dev.qilletni.impl.lang.types.StringTypeImpl;
+import dev.qilletni.impl.lang.types.*;
 import dev.qilletni.impl.lang.types.conversion.BulkTypeConversion;
 import dev.qilletni.impl.lang.types.conversion.TypeConverterImpl;
 import dev.qilletni.impl.lang.types.entity.EntityDefinitionManagerImpl;
@@ -53,7 +38,6 @@ import dev.qilletni.impl.lang.types.list.ListTypeTransformerFactory;
 import dev.qilletni.impl.lib.LibraryRegistrar;
 import dev.qilletni.impl.lib.LibrarySourceFileResolver;
 import dev.qilletni.impl.lib.persistence.PackageConfigImpl;
-import dev.qilletni.impl.music.MusicPopulatorImpl;
 import dev.qilletni.impl.music.factories.AlbumTypeFactoryImpl;
 import dev.qilletni.impl.music.factories.CollectionStateFactoryImpl;
 import dev.qilletni.impl.music.factories.CollectionTypeFactoryImpl;
@@ -96,11 +80,23 @@ public class QilletniProgramRunner {
     // Import cache to avoid importing the same file multiple times
     private final Set<ImportPathState> importCache = new HashSet<>();
 
-    public QilletniProgramRunner(DynamicProvider dynamicProvider, LibrarySourceFileResolver librarySourceFileResolver, List<QllInfo> loadedQllInfos) {
+    /**
+     * 
+     * @param dynamicProvider The {@link DynamicProvider} which has references to all initialized service providers
+     * @param musicPopulator The {@link MusicPopulator}. This is passed in because service providers are created before
+     *                       this constructor is called, and a {@link MusicPopulator} is required for creating a
+     *                       {@link dev.qilletni.api.music.orchestration.TrackOrchestrator} which a service provider
+     *                       may need.
+     * @param librarySourceFileResolver The {@link LibrarySourceFileResolver} to resolve packages
+     * @param loadedQllInfos All loaded QLL files
+     */
+    public QilletniProgramRunner(DynamicProvider dynamicProvider, MusicPopulator musicPopulator, LibrarySourceFileResolver librarySourceFileResolver, List<QllInfo> loadedQllInfos) {
         internalPackageConfig.loadConfig();
         
         dynamicProvider.initializeInitialProvider(internalPackageConfig);
         
+        this.musicPopulator = musicPopulator;
+        this.musicPopulator.setEagerMusicLoad(internalPackageConfig.get("eagerMusicLoad").orElse("false").equals("true"));
         
         this.dynamicProvider = dynamicProvider;
         this.symbolTables = new HashMap<>();
@@ -112,14 +108,13 @@ public class QilletniProgramRunner {
         
         var bulkTypeConversion = new BulkTypeConversion(typeAdapterRegistrar);
         this.entityInitializer = new EntityInitializerImpl(entityDefinitionManager, bulkTypeConversion);
-        this.musicPopulator = new MusicPopulatorImpl(dynamicProvider, internalPackageConfig);
         this.qilletniStackTrace = new QilletniStackTraceImpl();
         this.backgroundTaskExecutor = new BackgroundTaskExecutorImpl(qilletniStackTrace);
 
         var typeConverter = new TypeConverterImpl(typeAdapterRegistrar, entityInitializer, bulkTypeConversion);
 
         var songTypeFactory = new SongTypeFactoryImpl(dynamicProvider);
-        var collectionTypeFactory = new CollectionTypeFactoryImpl(dynamicProvider);
+        var collectionTypeFactory = new CollectionTypeFactoryImpl(dynamicProvider, musicPopulator);
         var albumTypeFactory = new AlbumTypeFactoryImpl(dynamicProvider);
 
         dynamicProvider.initFactories(songTypeFactory, collectionTypeFactory, albumTypeFactory);
@@ -144,7 +139,7 @@ public class QilletniProgramRunner {
         nativeFunctionHandler.addInjectableInstance(typeConverter);
         nativeFunctionHandler.addInjectableInstance(dynamicProvider);
         nativeFunctionHandler.addInjectableInstance(backgroundTaskExecutor);
-        nativeFunctionHandler.addInjectableInstance(new CollectionStateFactoryImpl(dynamicProvider));
+        nativeFunctionHandler.addInjectableInstance(new CollectionStateFactoryImpl(dynamicProvider, musicPopulator));
         
         if (debugSupport.isDebugEnabled()) {
             LOGGER.debug("Debugging enabled");

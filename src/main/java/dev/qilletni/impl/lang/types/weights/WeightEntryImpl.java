@@ -1,18 +1,14 @@
 package dev.qilletni.impl.lang.types.weights;
 
-import dev.qilletni.api.lang.types.CollectionType;
-import dev.qilletni.api.lang.types.ListType;
-import dev.qilletni.api.lang.types.WeightsType;
 import dev.qilletni.api.lang.types.weights.WeightEntry;
 import dev.qilletni.api.lang.types.weights.WeightTrackType;
 import dev.qilletni.api.lang.types.weights.WeightUnit;
-import dev.qilletni.api.lang.types.SongType;
 import dev.qilletni.api.music.MusicPopulator;
-import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
-import dev.qilletni.api.music.orchestration.CollectionState;
+import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.api.music.supplier.DynamicProvider;
-import dev.qilletni.impl.music.orchestration.CollectionStateImpl;
+import dev.qilletni.impl.lang.types.orderable.OrderableTracksTypeInitializer;
+import dev.qilletni.impl.music.orchestration.OrderableTypeStateImpl;
 
 import java.util.Collections;
 import java.util.List;
@@ -27,9 +23,8 @@ public class WeightEntryImpl implements WeightEntry {
     private final WeightTrackType weightTrackType;
     SongType song;
     private ListType songList;
-    private CollectionState collectionState;
+    private OrderableTypeState orderableTypeState;
     private WeightsType weights;
-    private Playlist playlist;
     private final MusicPopulator musicPopulator;
     private final DynamicProvider dynamicProvider;
 
@@ -78,7 +73,7 @@ public class WeightEntryImpl implements WeightEntry {
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
 
-        this.collectionState = new CollectionStateImpl(collection, dynamicProvider);
+        this.orderableTypeState = new OrderableTypeStateImpl(collection, new OrderableTracksTypeInitializer(musicPopulator, dynamicProvider.getMusicCache()));
         this.weightTrackType = WeightTrackType.COLLECTION;
     }
 
@@ -94,7 +89,7 @@ public class WeightEntryImpl implements WeightEntry {
         this.weightTrackType = WeightTrackType.WEIGHTS;
     }
 
-    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, Playlist playlist, boolean canRepeatTrack, boolean canRepeatWeight) {
+    public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, AlbumType albumType, boolean canRepeatTrack, boolean canRepeatWeight) {
         this.weightAmount = weightAmount;
         this.weightUnit = weightUnit;
         this.musicPopulator = musicPopulator;
@@ -102,8 +97,8 @@ public class WeightEntryImpl implements WeightEntry {
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
         
-        this.playlist = playlist;
-        this.weightTrackType = WeightTrackType.PLAYLIST;
+        this.orderableTypeState = new OrderableTypeStateImpl(albumType, new OrderableTracksTypeInitializer(musicPopulator, dynamicProvider.getMusicCache()));
+        this.weightTrackType = WeightTrackType.ALBUM;
     }
 
     @Override
@@ -165,12 +160,8 @@ public class WeightEntryImpl implements WeightEntry {
                 var songs = songList.getItems();
                 yield ((SongType) songs.get(ThreadLocalRandom.current().nextInt(0, songs.size()))).getTrack();
             }
-            case COLLECTION -> trackOrchestrator.getTrackFromCollection(collectionState);
+            case COLLECTION, ALBUM -> trackOrchestrator.getTrackFromOrderableType(orderableTypeState);
             case WEIGHTS -> trackOrchestrator.getTrackFromWeight(weights);
-            case PLAYLIST -> {
-                var tracks = musicCache.getPlaylistTracks(playlist);
-                yield tracks.get(ThreadLocalRandom.current().nextInt(0, tracks.size()));
-            }
             case FUNCTION -> throw new UnsupportedOperationException("Function weight entry should use LazyWeightEntry");
         };
     }
@@ -187,9 +178,12 @@ public class WeightEntryImpl implements WeightEntry {
             case LIST -> songList.getItems().stream().map(SongType.class::cast)
                     .peek(musicPopulator::populateSong)
                     .map(SongType::getTrack).toList();
-            case COLLECTION -> musicCache.getPlaylistTracks(collectionState.getCollection().getPlaylist());
-            case WEIGHTS -> weights.getWeightEntries().stream().flatMap(weightEntry -> weightEntry.getAllTracks().stream()).toList();
-            case PLAYLIST -> musicCache.getPlaylistTracks(playlist);
+            case COLLECTION, ALBUM -> switch (orderableTypeState.getOrderableType()) {
+                case AlbumType albumType -> musicCache.getAlbumTracks(albumType.getAlbum());
+                case CollectionType collectionType -> musicCache.getPlaylistTracks(collectionType.getPlaylist());
+            };
+            case WEIGHTS ->
+                    weights.getWeightEntries().stream().flatMap(weightEntry -> weightEntry.getAllTracks().stream()).toList();
             case FUNCTION -> Collections.emptyList();
         };
     }
@@ -204,9 +198,8 @@ public class WeightEntryImpl implements WeightEntry {
         return switch (weightTrackType) {
             case SINGLE_TRACK -> song.stringValue();
             case LIST -> songList.stringValue();
-            case COLLECTION -> collectionState.stringValue();
+            case COLLECTION, ALBUM -> orderableTypeState.stringValue();
             case WEIGHTS -> weights.stringValue();
-            case PLAYLIST -> String.format("[Raw playlist of ID %s]", playlist.getId());
             case FUNCTION -> "function-call";
         };
     }

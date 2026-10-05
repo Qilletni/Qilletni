@@ -2,8 +2,10 @@ package dev.qilletni.impl;
 
 import dev.qilletni.api.auth.ServiceProvider;
 import dev.qilletni.api.lib.qll.QllInfo;
+import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lib.persistence.PackageConfigImpl;
+import dev.qilletni.impl.music.MusicPopulatorImpl;
 import dev.qilletni.impl.music.orchestration.DefaultTrackOrchestrator;
 import dev.qilletni.impl.music.supplier.DynamicProviderImpl;
 import org.slf4j.Logger;
@@ -17,7 +19,7 @@ public class ServiceManager {
     
     private static final Logger LOGGER = LoggerFactory.getLogger(ServiceManager.class);
     
-    public static DynamicProvider createDynamicProvider(List<QllInfo> qllInfos) {
+    public static DynamicProviderCreation createDynamicProvider(List<QllInfo> qllInfos) {
         var providers = qllInfos.stream()
                 .map(QllInfo::providerClass)
                 .filter(Objects::nonNull)
@@ -25,11 +27,12 @@ public class ServiceManager {
                 .filter(Optional::isPresent).map(Optional::get).toList();
         
         var dynamicProvider = new DynamicProviderImpl();
+        var musicPopulator = new MusicPopulatorImpl(dynamicProvider);
         
         for (var provider : providers) {
             // Pass in unloaded PackageConfig to the provider. They don't have to load it (or create one) if they don't need to.
             var packageConfig = PackageConfigImpl.createPackageConfig(provider.getName());
-            provider.initialize(DefaultTrackOrchestrator::new, packageConfig).exceptionally(t -> {
+            provider.initialize((playActor, musicCache) -> new DefaultTrackOrchestrator(playActor, musicCache, musicPopulator), packageConfig).exceptionally(t -> {
                 LOGGER.error("Failed to initialize service provider: {}", provider.getName(), t);
                 return null;
             }).join();
@@ -37,7 +40,7 @@ public class ServiceManager {
             dynamicProvider.addServiceProvider(provider);
         }
         
-        return dynamicProvider;
+        return new DynamicProviderCreation(dynamicProvider, musicPopulator);
     }
     
     private static Optional<ServiceProvider> loadServiceProviderClass(String className) {
@@ -49,5 +52,7 @@ public class ServiceManager {
             return Optional.empty();
         }
     }
+    
+    public record DynamicProviderCreation(DynamicProvider dynamicProvider, MusicPopulator musicPopulator) {}
     
 }

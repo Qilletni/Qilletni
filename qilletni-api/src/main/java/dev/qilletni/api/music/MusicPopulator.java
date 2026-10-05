@@ -10,6 +10,21 @@ import dev.qilletni.api.lang.types.SongType;
 public interface MusicPopulator {
 
     /**
+     * Sets the eager loading flag. Eager loading will populate music types as soon as possible. Non-eager loading will
+     * wait until necessary.
+     * 
+     * @param eagerMusicLoad Whether to enable eager loading.
+     */
+    void setEagerMusicLoad(boolean eagerMusicLoad);
+
+    /**
+     * Gets whether eager loading is enabled.
+     * 
+     * @return Whether eager loading is enabled.
+     */
+    boolean getEagerMusicLoad();
+
+    /**
      * If eager loading is enabled, the given song is populated via {@link #populateSong(SongType)}.
      * Otherwise, nothing occurs.
      * TODO: Make this into some kind of factory for SongTypes?

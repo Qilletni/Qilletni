@@ -1,7 +1,6 @@
 package dev.qilletni.api.lang.types;
 
 import dev.qilletni.api.lang.types.collection.CollectionDefinition;
-import dev.qilletni.api.lang.types.collection.CollectionOrder;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.music.Playlist;
 
@@ -9,7 +8,7 @@ import dev.qilletni.api.music.Playlist;
  * Represents a <code>collection</code> type in Qilletni. This is essentially an abstracted playlist, or list of songs.
  * This may be created by the <code>"Collection Name" collection by "Creator Name"</code> expression syntax.
  */
-public non-sealed interface CollectionType extends AnyType {
+public non-sealed interface CollectionType extends AnyType, OrderableTracksType {
 
     /**
      * Retrieves the current collection definition associated with the implementing object. The collection definition 
@@ -49,36 +48,6 @@ public non-sealed interface CollectionType extends AnyType {
      * @return A string representing the user-supplied creator's name
      */
     String getSuppliedCreator();
-
-    /**
-     * Retrieves the current ordering of the collection when it is played. The order specifies how the collection items
-     * are arranged, such as in a sequential manner or shuffled.
-     *
-     * @return The {@link CollectionOrder} representing the current ordering of the collection
-     */
-    CollectionOrder getOrder();
-
-    /**
-     * Sets the ordering of the collection when it is played. The order specifies how the items in the collection
-     * are arranged, such as sequentially or shuffled.
-     *
-     * @param order The {@link CollectionOrder} to set for the collection
-     */
-    void setOrder(CollectionOrder order);
-
-    /**
-     * Gets the weights applied to the collection.
-     * 
-     * @return The weights applied to the collection
-     */
-    WeightsType getWeights();
-
-    /**
-     * Sets the weights for the collection.
-     *
-     * @param weights The {@link WeightsType} object to be associated with the collection
-     */
-    void setWeights(WeightsType weights);
 
     /**
      * Retrieves the creator as a User {@link EntityType} using the given entity definition manager.

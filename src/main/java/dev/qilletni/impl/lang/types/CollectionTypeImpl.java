@@ -1,6 +1,5 @@
 package dev.qilletni.impl.lang.types;
 
-import dev.qilletni.impl.SpotifyDataUtility;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.lang.types.EntityType;
 import dev.qilletni.api.lang.types.QilletniType;
@@ -9,15 +8,18 @@ import dev.qilletni.api.lang.types.collection.CollectionDefinition;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
+import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.supplier.DynamicProvider;
+import dev.qilletni.impl.SpotifyDataUtility;
 import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 import dev.qilletni.impl.music.DummyPlaylist;
 
 import java.util.List;
 
 public final class CollectionTypeImpl implements CollectionType {
+    private MusicPopulator musicPopulator;
 
     private CollectionDefinition collectionDefinition;
     private String url;
@@ -28,25 +30,29 @@ public final class CollectionTypeImpl implements CollectionType {
     private final DynamicMusicType<Playlist> dynamicPlaylist;
     private EntityType creatorType;
     
-    public CollectionTypeImpl(DynamicProvider dynamicProvider, Playlist playlist) {
+    public CollectionTypeImpl(DynamicProvider dynamicProvider, MusicPopulator musicPopulator, Playlist playlist) {
+        this.musicPopulator = musicPopulator;
         this.collectionDefinition = CollectionDefinition.PREPOPULATED;
         this.dynamicPlaylist = new DynamicMusicType<>(Playlist.class, dynamicProvider, playlist);
     }
 
-    public CollectionTypeImpl(DynamicProvider dynamicProvider, String url) {
+    public CollectionTypeImpl(DynamicProvider dynamicProvider, MusicPopulator musicPopulator, String url) {
+        this.musicPopulator = musicPopulator;
         this.collectionDefinition = CollectionDefinition.URL;
         this.url = url;
         this.dynamicPlaylist = new DynamicMusicType<>(Playlist.class, dynamicProvider);
     }
 
-    public CollectionTypeImpl(DynamicProvider dynamicProvider, String name, String creator) {
+    public CollectionTypeImpl(DynamicProvider dynamicProvider, MusicPopulator musicPopulator, String name, String creator) {
+        this.musicPopulator = musicPopulator;
         this.collectionDefinition = CollectionDefinition.NAME_CREATOR;
         this.name = name;
         this.creator = creator;
         this.dynamicPlaylist = new DynamicMusicType<>(Playlist.class, dynamicProvider);
     }
     
-    public CollectionTypeImpl(DynamicProvider dynamicProvider, List<Track> tracks) {
+    public CollectionTypeImpl(DynamicProvider dynamicProvider, MusicPopulator musicPopulator, List<Track> tracks) {
+        this.musicPopulator = musicPopulator;
         this.collectionDefinition = CollectionDefinition.SONG_LIST;
         this.dynamicPlaylist = new DynamicMusicType<>(Playlist.class, dynamicProvider, new DummyPlaylist(tracks));
     }
@@ -95,7 +101,7 @@ public final class CollectionTypeImpl implements CollectionType {
     public void setWeights(WeightsType weights) {
         this.weights = weights;
     }
-    
+
     @Override
     public EntityType getCreator(EntityDefinitionManager entityDefinitionManager) {
         var playlist = dynamicPlaylist.get();
