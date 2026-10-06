@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Added
+
+- Album playing in both a direct `play` and in weights
+- Direct weights playing with limits (no loop; plays one track with no limit specified)
+
 ## [1.0.2] - 2026-09-21
 
 ### Added
