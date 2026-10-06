@@ -1,5 +1,6 @@
 package dev.qilletni.impl.lang.types.weights;
 
+import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.weights.WeightEntry;
 import dev.qilletni.api.lang.types.weights.WeightTrackType;
 import dev.qilletni.api.lang.types.weights.WeightUnit;

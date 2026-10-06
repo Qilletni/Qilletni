@@ -1437,9 +1437,19 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                 }
             }
             case WeightsType weights -> {
-                var trackFromWeights = trackOrchestrator.getTrackFromWeight(weights);
-                LOGGER.debug("Playing selected track from weights: {}", trackFromWeights);
-                trackOrchestrator.playTrack(trackFromWeights);
+                LOGGER.debug("Playing selected track from weights");
+                
+                if (ctx.LOOP_PARAM() != null) {
+                    throw new UnplayableTypeException("Looping is not supported for weights");
+                }
+
+                if (ctx.collection_limit() != null) {
+                    CollectionLimit limit = visitNode(ctx.collection_limit());
+                    trackOrchestrator.playWeights(weights, limit);
+                } else {
+                    // No loop for weights; there's no end. Only play one track.
+                    trackOrchestrator.playWeights(weights, new CollectionLimit(1, CollectionLimitUnit.COUNT));
+                }
             }
             default -> throw new UnplayableTypeException("Unable to play an instance of type " + playingNode.typeName() + ". Can only play collection, song, or weights");
         }

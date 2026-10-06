@@ -20,6 +20,15 @@ public interface TrackOrchestrator {
     void playTrack(Track track);
     
     /**
+     * Plays a set of weights directly. This must be a set of weights that add up to 100%, as it's not weighing an
+     * existing collection.
+     * 
+     * @param weightsType The weights to play
+     * @param collectionLimit The limit of tracks to play
+     */
+    void playWeights(WeightsType weightsType, CollectionLimit collectionLimit);
+    
+    /**
      * Plays a collection of tracks. If looping, it will continue until the program exits.
      * 
      * @param collectionType The type of collection to play

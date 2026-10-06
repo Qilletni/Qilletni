@@ -1,12 +1,13 @@
 package dev.qilletni.impl.lang.types;
 
-import dev.qilletni.api.lang.types.album.AlbumDefinition;
+import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
+import dev.qilletni.impl.SpotifyDataUtility;
+import dev.qilletni.api.lang.types.album.AlbumDefinition;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.supplier.DynamicProvider;
-import dev.qilletni.impl.SpotifyDataUtility;
 import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
 public final class AlbumTypeImpl implements AlbumType {
