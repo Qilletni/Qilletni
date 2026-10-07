@@ -1412,6 +1412,14 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
 
         switch (playingNode) {
             case SongType song -> {
+                if (ctx.LOOP_PARAM() != null) {
+                    throw new UnplayableTypeException("Looping is not supported for songs");
+                }
+                
+                if (ctx.collection_limit() != null) {
+                    throw new UnplayableTypeException("Limits are not supported for songs");
+                }
+                
                 musicPopulator.populateSong(song);
                 trackOrchestrator.playTrack(song.getTrack());
             }
