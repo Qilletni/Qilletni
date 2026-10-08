@@ -31,5 +31,21 @@ public class WeightUtils {
         
         return totalPercent;
     }
+
+    /**
+     * Checks if the provided weights are constrained. Weights are constrained if all entries add up to 100%, and
+     * contain no other weight entries.
+     *
+     * @param weights The weights to check
+     * @return Whether the weights are constrained
+     */
+    public static boolean areWeightsConstrained(WeightsType weights) {
+        if (weights.getWeightEntries().stream()
+                .anyMatch(entry -> entry.getWeightUnit() != WeightUnit.PERCENT)) {
+            return false;
+        }
+
+        return weights.getWeightEntries().stream().mapToDouble(WeightEntry::getWeightAmount).sum() == 100;
+    }
     
 }

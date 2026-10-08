@@ -217,8 +217,11 @@ public class SpotifyMusicCache implements MusicCache {
 
             Join<SpotifyPlaylist, SpotifyUser> departmentJoin = root.join("creator");
 
-            var playlistNamePredicate = builder.equal(root.get("title"), name);
-            var creatorPredicate = builder.equal(departmentJoin.get("name"), creator);
+            // Spotify lookups are case-insensitive, and the creator may be given as either the user's ID or name
+            var playlistNamePredicate = builder.equal(builder.lower(root.get("title")), name.toLowerCase());
+            var creatorPredicate = builder.or(
+                    builder.equal(builder.lower(departmentJoin.get("name")), creator.toLowerCase()),
+                    builder.equal(builder.lower(departmentJoin.get("id")), creator.toLowerCase()));
 
             criteria.where(playlistNamePredicate, creatorPredicate);
 
@@ -261,8 +264,9 @@ public class SpotifyMusicCache implements MusicCache {
 
             Join<SpotifyAlbum, SpotifyArtist> departmentJoin = root.join("artists");
 
-            var albumNamePredicate = builder.equal(root.get("name"), name);
-            var artistPredicate = builder.equal(departmentJoin.get("name"), artist);
+            // Spotify searches are case-insensitive, so the cache lookup should be as well
+            var albumNamePredicate = builder.equal(builder.lower(root.get("name")), name.toLowerCase());
+            var artistPredicate = builder.equal(builder.lower(departmentJoin.get("name")), artist.toLowerCase());
 
             criteria.where(albumNamePredicate, artistPredicate);
 
@@ -489,6 +493,12 @@ public class SpotifyMusicCache implements MusicCache {
     private SpotifyPlaylist storePlaylist(SpotifyPlaylist playlist) {
         try (var entityTransaction = EntityTransaction.beginTransaction()) {
             var session = entityTransaction.getSession();
+
+            var foundPlaylist = session.find(SpotifyPlaylist.class, playlist.getId());
+            if (foundPlaylist != null) {
+                LOGGER.debug("Already found playlist: {}", foundPlaylist);
+                return foundPlaylist;
+            }
 
             var user = (SpotifyUser) playlist.getCreator();
             var databaseUser = session.find(SpotifyUser.class, user.getId());

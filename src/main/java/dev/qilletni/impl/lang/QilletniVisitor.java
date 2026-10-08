@@ -1,28 +1,11 @@
 package dev.qilletni.impl.lang;
 
-import dev.qilletni.impl.StringUtility;
-import dev.qilletni.impl.antlr.QilletniLexer;
-import dev.qilletni.impl.antlr.QilletniParser;
-import dev.qilletni.impl.antlr.QilletniParserBaseVisitor;
 import dev.qilletni.api.exceptions.InvalidWeightException;
 import dev.qilletni.api.lang.stack.QilletniStackTrace;
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.table.Symbol;
 import dev.qilletni.api.lang.table.SymbolTable;
-import dev.qilletni.api.lang.types.AlbumType;
-import dev.qilletni.api.lang.types.AnyType;
-import dev.qilletni.api.lang.types.BooleanType;
-import dev.qilletni.api.lang.types.CollectionType;
-import dev.qilletni.api.lang.types.DoubleType;
-import dev.qilletni.api.lang.types.EntityType;
-import dev.qilletni.api.lang.types.ImportAliasType;
-import dev.qilletni.api.lang.types.IntType;
-import dev.qilletni.api.lang.types.JavaType;
-import dev.qilletni.api.lang.types.ListType;
-import dev.qilletni.api.lang.types.QilletniType;
-import dev.qilletni.api.lang.types.SongType;
-import dev.qilletni.api.lang.types.StringType;
-import dev.qilletni.api.lang.types.WeightsType;
+import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.collection.CollectionLimit;
 import dev.qilletni.api.lang.types.collection.CollectionLimitUnit;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
@@ -35,18 +18,11 @@ import dev.qilletni.api.lang.types.weights.WeightUnit;
 import dev.qilletni.api.lang.types.weights.WeightUtils;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
-import dev.qilletni.impl.lang.exceptions.CannotTypeCheckAnyException;
-import dev.qilletni.impl.lang.exceptions.CascadeFailedException;
-import dev.qilletni.impl.lang.exceptions.FunctionDidntReturnException;
-import dev.qilletni.impl.lang.exceptions.InternalLanguageException;
-import dev.qilletni.impl.lang.exceptions.InvalidConstructor;
-import dev.qilletni.impl.lang.exceptions.InvalidStaticException;
-import dev.qilletni.impl.lang.exceptions.InvalidSyntaxException;
-import dev.qilletni.impl.lang.exceptions.ListOutOfBoundsException;
-import dev.qilletni.impl.lang.exceptions.ListTransformerNotFoundException;
-import dev.qilletni.impl.lang.exceptions.QilletniContextException;
-import dev.qilletni.impl.lang.exceptions.TypeMismatchException;
-import dev.qilletni.impl.lang.exceptions.SymbolNotFoundException;
+import dev.qilletni.impl.StringUtility;
+import dev.qilletni.impl.antlr.QilletniLexer;
+import dev.qilletni.impl.antlr.QilletniParser;
+import dev.qilletni.impl.antlr.QilletniParserBaseVisitor;
+import dev.qilletni.impl.lang.exceptions.*;
 import dev.qilletni.impl.lang.internal.BackgroundTaskExecutorImpl;
 import dev.qilletni.impl.lang.internal.FunctionInvokerImpl;
 import dev.qilletni.impl.lang.internal.NativeFunctionHandler;
@@ -54,19 +30,7 @@ import dev.qilletni.impl.lang.internal.debug.DebugSupportImpl;
 import dev.qilletni.impl.lang.math.MixedExpression;
 import dev.qilletni.impl.lang.table.SymbolImpl;
 import dev.qilletni.impl.lang.table.TableUtils;
-import dev.qilletni.impl.lang.types.AlbumTypeImpl;
-import dev.qilletni.impl.lang.types.BooleanTypeImpl;
-import dev.qilletni.impl.lang.types.CollectionTypeImpl;
-import dev.qilletni.impl.lang.types.DoubleTypeImpl;
-import dev.qilletni.impl.lang.types.EntityTypeImpl;
-import dev.qilletni.impl.lang.types.FunctionTypeImpl;
-import dev.qilletni.impl.lang.types.IntTypeImpl;
-import dev.qilletni.impl.lang.types.JavaTypeImpl;
-import dev.qilletni.impl.lang.types.ListTypeImpl;
-import dev.qilletni.impl.lang.types.SongTypeImpl;
-import dev.qilletni.impl.lang.types.StringTypeImpl;
-import dev.qilletni.impl.lang.types.TypeUtils;
-import dev.qilletni.impl.lang.types.WeightsTypeImpl;
+import dev.qilletni.impl.lang.types.*;
 import dev.qilletni.impl.lang.types.entity.EntityAttributes;
 import dev.qilletni.impl.lang.types.entity.EntityDefinitionImpl;
 import dev.qilletni.impl.lang.types.entity.FunctionPopulator;
@@ -78,14 +42,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -282,7 +239,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                         yield TypeUtils.safelyCast(value, QilletniTypeClass.COLLECTION);
                     }
 
-                    yield musicPopulator.initiallyPopulateCollection(new CollectionTypeImpl(dynamicProvider, stringType.stringValue()));
+                    yield musicPopulator.initiallyPopulateCollection(new CollectionTypeImpl(dynamicProvider, musicPopulator, stringType.stringValue()));
                 }
                 case QilletniLexer.SONG_TYPE -> {
                     var value = visitQilletniTypedNode(expr);
@@ -1363,6 +1320,8 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
             albumType = new AlbumTypeImpl(dynamicProvider, StringUtility.removeQuotes(urlOrName.STRING(0).getText()), StringUtility.removeQuotes(urlOrName.STRING(1).getText()));
         }
 
+        parseOrderSettings(ctx.order_settings(), albumType);
+
         return musicPopulator.initiallyPopulateAlbum(albumType);
     }
 
@@ -1413,6 +1372,8 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
 
         return switch (weightValue) {
             case CollectionType collectionType -> new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, collectionType, canRepeatTrack, canRepeatWeight);
+            case SongType songType             -> new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, songType, canRepeatTrack, canRepeatWeight);
+            case AlbumType albumType           -> new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, albumType, canRepeatTrack, canRepeatWeight);
             case ListType listType -> {
                 if (!QilletniTypeClass.SONG.equals(listType.getSubType())) {
                     throw new TypeMismatchException("Expected a song list, got a " + listType.getSubType());
@@ -1424,7 +1385,6 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                 
                 yield new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, listType, canRepeatTrack, canRepeatWeight);
             }
-            case SongType songType -> new WeightEntryImpl(weightInt, weightUnit, musicPopulator, dynamicProvider, songType, canRepeatTrack, canRepeatWeight);
             case WeightsType weightsType -> {
                 var totalPercent = WeightUtils.validateWeights(weightsType);
                 if (totalPercent != 100) {
@@ -1449,23 +1409,57 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         } else {
             playingNode = visitQilletniTypedNode(ctx.expr());
         }
-        
-        if (playingNode instanceof SongType song) {
-            musicPopulator.populateSong(song);
-            trackOrchestrator.playTrack(song.getTrack());
-            return null;
-        }
 
-        var collection = (CollectionType) playingNode;
+        switch (playingNode) {
+            case SongType song -> {
+                if (ctx.LOOP_PARAM() != null) {
+                    throw new UnplayableTypeException("Looping is not supported for songs");
+                }
+                
+                if (ctx.collection_limit() != null) {
+                    throw new UnplayableTypeException("Limits are not supported for songs");
+                }
+                
+                musicPopulator.populateSong(song);
+                trackOrchestrator.playTrack(song.getTrack());
+            }
+            // These two cases could be merged into one if playCollection and playAlbum methods took an OrderableTracksType
+            case CollectionType collection -> {
+                if (ctx.collection_limit() != null) {
+                    CollectionLimit limit = visitNode(ctx.collection_limit());
+                    LOGGER.debug("Playing collection {} with a limit of {}", collection, limit);
+                    trackOrchestrator.playCollection(collection, limit);
+                } else {
+                    LOGGER.debug("Playing collection {}", collection);
+                    trackOrchestrator.playCollection(collection, ctx.LOOP_PARAM() != null);
+                }
+            }
+            case AlbumType album -> {
+                if (ctx.collection_limit() != null) {
+                    CollectionLimit limit = visitNode(ctx.collection_limit());
+                    LOGGER.debug("Playing album {} with a limit of {}", album, limit);
+                    trackOrchestrator.playAlbum(album, limit);
+                } else {
+                    LOGGER.debug("Playing album {}", album);
+                    trackOrchestrator.playAlbum(album, ctx.LOOP_PARAM() != null);
+                }
+            }
+            case WeightsType weights -> {
+                LOGGER.debug("Playing selected track from weights");
+                
+                if (ctx.LOOP_PARAM() != null) {
+                    throw new UnplayableTypeException("Looping is not supported for weights");
+                }
 
-        musicPopulator.populateCollection(collection);
-        if (ctx.collection_limit() != null) {
-            CollectionLimit limit = visitNode(ctx.collection_limit());
-            LOGGER.debug("Playing collection {} with a limit of {}", collection, limit);
-            trackOrchestrator.playCollection(collection, limit);
-        } else {
-            LOGGER.debug("Playing collection {}", collection);
-            trackOrchestrator.playCollection(collection, ctx.LOOP_PARAM() != null);
+                if (ctx.collection_limit() != null) {
+                    CollectionLimit limit = visitNode(ctx.collection_limit());
+                    trackOrchestrator.playWeights(weights, limit);
+                } else {
+                    // No loop for weights; there's no end. Only play one track.
+                    trackOrchestrator.playWeights(weights, new CollectionLimit(1, CollectionLimitUnit.COUNT));
+                }
+            }
+            default -> throw new UnplayableTypeException("Unable to play an instance of type " + playingNode.typeName() + ". Can only play collection, song, or weights");
         }
 
         return null;
@@ -1664,23 +1658,17 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                     .map(SongType.class::cast)
                     .forEach(musicPopulator::populateSong);
 
-            collectionType = new CollectionTypeImpl(dynamicProvider, songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList());
+            collectionType = new CollectionTypeImpl(dynamicProvider, musicPopulator, songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList());
         } else {
             var urlOrName = ctx.collection_url_or_name_pair();
             if (ctx.STRING() != null) {
-                collectionType = new CollectionTypeImpl(dynamicProvider, StringUtility.removeQuotes(ctx.STRING().getText()));
+                collectionType = new CollectionTypeImpl(dynamicProvider, musicPopulator, StringUtility.removeQuotes(ctx.STRING().getText()));
             } else {
-                collectionType = new CollectionTypeImpl(dynamicProvider, StringUtility.removeQuotes(urlOrName.STRING(0).getText()), StringUtility.removeQuotes(urlOrName.STRING(1).getText()));
+                collectionType = new CollectionTypeImpl(dynamicProvider, musicPopulator, StringUtility.removeQuotes(urlOrName.STRING(0).getText()), StringUtility.removeQuotes(urlOrName.STRING(1).getText()));
             }
         }
 
-        if (ctx.order_define() != null) {
-            collectionType.setOrder(visitNode(ctx.order_define()));
-        }
-
-        if (ctx.weights_define() != null) {
-            collectionType.setWeights(visitNode(ctx.weights_define()));
-        }
+        parseOrderSettings(ctx.order_settings(), collectionType);
 
         return musicPopulator.initiallyPopulateCollection(collectionType);
     }
@@ -1699,6 +1687,21 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         }
 
         return this.functionInvoker.<WeightsType>invokeFunction(ctx.function_call()).orElseThrow(FunctionDidntReturnException::new);
+    }
+    
+    private void parseOrderSettings(QilletniParser.Order_settingsContext ctx, OrderableTracksType orderableTracksType) {
+        if (ctx.order_define() != null) {
+            orderableTracksType.setOrder(visitNode(ctx.order_define()));
+        }
+
+        if (ctx.weights_define() != null) {
+            orderableTracksType.setWeights(visitNode(ctx.weights_define()));
+        }
+    }
+
+    @Override
+    public Object visitOrder_settings(QilletniParser.Order_settingsContext ctx) {
+        throw new RuntimeException("This should never be accessed directly");
     }
 
     @Override

@@ -9,6 +9,19 @@ package dev.qilletni.api.lang.types.collection;
  */
 public record CollectionLimit(int limitCount, CollectionLimitUnit limitUnit) {
 
+    /**
+     * Gets the limit in milliseconds.
+     * 
+     * @return The limit in milliseconds
+     */
+    public long calculateLimitMilliseconds() {
+        if (limitUnit == CollectionLimitUnit.COUNT) {
+            throw new IllegalStateException("Attempted to calculate limit in milliseconds for a count-based limit");
+        }
+        
+        return limitUnit.getTimeUnit().toMillis(limitCount);
+    }
+
     @Override
     public String toString() {
         return String.format("CollectionLimit{%d%s}", limitCount, limitUnit.getUnitText());

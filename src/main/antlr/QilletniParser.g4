@@ -126,8 +126,8 @@ str_expr
     ;
 
 collection_expr
-    : collection_url_or_name_pair order_define? weights_define?
-    | COLLECTION_TYPE LEFT_PAREN (list_expression | ID) RIGHT_PAREN order_define? weights_define?
+    : collection_url_or_name_pair order_settings
+    | COLLECTION_TYPE LEFT_PAREN (list_expression | ID) RIGHT_PAREN order_settings
     | STRING
     ;
 
@@ -145,8 +145,12 @@ song_expr
     ;
 
 album_expr
-    : album_url_or_name_pair
+    : album_url_or_name_pair order_settings
     | STRING
+    ;
+
+order_settings
+    : order_define? weights_define?
     ;
 
 song_url_or_name_pair

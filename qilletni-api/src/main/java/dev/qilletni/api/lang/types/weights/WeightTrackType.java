@@ -1,6 +1,6 @@
 package dev.qilletni.api.lang.types.weights;
 
-import dev.qilletni.api.music.Playlist;
+import dev.qilletni.api.music.Album;
 
 /**
  * The source of a {@link WeightEntry}.
@@ -30,10 +30,10 @@ public enum WeightTrackType {
     WEIGHTS,
 
     /**
-     * The weight entry is a {@link Playlist}, and will choose a random track from the
-     * playlist when the weight entry is picked.
+     * The weight entry is an {@link Album}, and will choose a random track from the
+     * album when the weight entry is picked.
      */
-    PLAYLIST,
+    ALBUM,
 
     /**
      * The weight entry is a function, and will be evaluated when the weight entry is picked. The function should

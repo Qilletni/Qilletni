@@ -9,7 +9,7 @@ import dev.qilletni.api.music.Album;
  * expression syntax. The internal service provider's type is dynamic, changing how the data is fetched when the service
  * provider is changed.
  */
-public non-sealed interface AlbumType extends AnyType {
+public non-sealed interface AlbumType extends AnyType, OrderableTracksType {
 
     /**
      * Retrieves the current album definition associated with the implementing object. The album definition determines
