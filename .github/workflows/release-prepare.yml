@@ -28,6 +28,9 @@ jobs:
     with:
       component: qilletni-core
       bump: ${{ inputs.bump }}
+      # Only core and API are released here. The library packages (qilletni-lib-std,
+      # qilletni-spotify) publish separately to QPM and must not block this release.
+      test_tasks: ":clean :qilletni-api:clean :test :qilletni-api:test"
     secrets:
       app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
       app-private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}

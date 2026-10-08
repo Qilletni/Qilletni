@@ -70,7 +70,9 @@ The workflow calls `reusable-release-prepare.yml` in this repository. It does th
   `1.0.2-SNAPSHOT` with a `patch` bump gives `1.0.2`, not `1.0.3`.
 - It stops if the `## [Unreleased]` section is empty.
 - It stops if the bump is `major` and `docs/migrations/X.Y.Z.md` does not exist.
-- It runs `./gradlew clean test`, and stops if a test fails.
+- It runs the test tasks of the release unit, and stops if a test fails. The default is
+  `./gradlew clean test`. A repository can set the `test_tasks` input to test only the
+  projects that it releases. In Qilletni, the library packages are not part of this test.
 - It writes the new version to the version key.
 - It moves the `Unreleased` entries to a new `## [X.Y.Z] - <date>` section.
 - It writes the release marker `release/pending-release.json`. The marker records the

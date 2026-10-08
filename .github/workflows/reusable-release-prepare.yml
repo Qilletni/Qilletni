@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: .qilletni/release.yml
+      test_tasks:
+        description: "Gradle tasks that test the release unit (space-separated). Scope these to the released projects so unrelated subprojects cannot block a release."
+        required: false
+        type: string
+        default: clean test
     secrets:
       app-id:
         required: true
@@ -194,7 +199,10 @@ jobs:
 
       - name: Run the test suite against the prepared release
         if: steps.component.outputs.kind == 'maven' || steps.component.outputs.kind == 'cli'
-        run: ./gradlew clean test
+        env:
+          TEST_TASKS: ${{ inputs.test_tasks }}
+        # Intentionally unquoted so the task list word-splits into separate arguments.
+        run: ./gradlew $TEST_TASKS
 
       - name: Remove sparse release-tooling checkout
         run: rm -rf .qilletni-release-tooling

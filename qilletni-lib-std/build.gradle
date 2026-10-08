@@ -11,18 +11,7 @@ dependencies {
     compileOnly 'org.apache.logging.log4j:log4j-core:2.25.3'
     compileOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.1'
 
-    compileOnly 'dev.qilletni.api:qilletni-api:1.0.0'
-}
-
-// For local development only (-PincludeSiblingBuilds=true), compile against the
-// in-repo :qilletni-api project instead of the published artifact, so API changes
-// are visible here without publishing.
-if (providers.gradleProperty('includeSiblingBuilds').getOrElse('false').toBoolean()) {
-    configurations.configureEach {
-        resolutionStrategy.dependencySubstitution {
-            substitute module('dev.qilletni.api:qilletni-api') using project(':qilletni-api')
-        }
-    }
+    compileOnly project(':qilletni-api')
 }
 
 shadowJar {
