@@ -1,19 +1,20 @@
 package dev.qilletni.api.music.factories;
 
 import dev.qilletni.api.lang.types.CollectionType;
-import dev.qilletni.api.music.orchestration.OrderableTypeState;
+import dev.qilletni.api.music.orchestration.CollectionState;
 
 /**
- * Creates {@link OrderableTypeState}
+ * Creates {@link CollectionState}
  */
 public interface CollectionStateFactory {
 
     /**
-     * Creates a {@link OrderableTypeState} from a collection.
+     * Creates a {@link CollectionState} from a collection.
      *
      * @param collection The {@link CollectionType} to create a state for
      * @return The created state
      */
-    OrderableTypeState createFromCollection(CollectionType collection);
+    @SuppressWarnings("removal")
+    CollectionState createFromCollection(CollectionType collection);
 
 }

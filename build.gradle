@@ -3,7 +3,6 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'com.vanniktech.maven.publish' version '0.35.0'
-    id 'me.champeau.gradle.japicmp' version '0.4.6'
     id 'org.cyclonedx.bom' version '3.2.4'
 }
 
@@ -127,34 +126,6 @@ test {
 cyclonedxDirectBom {
     includeConfigs = ['runtimeClasspath']
     jsonOutput = layout.buildDirectory.file('reports/cyclonedx-direct/qilletni-core-bom.json')
-}
-
-// Public API compatibility check for `dev.qilletni.impl:qilletni`, enforced against
-// the policy in `tools/release/src/japicmp_policy.ts` (see `.qilletni/release.yml`).
-// `-PjapicmpBaselineJar=/path/to/old-qilletni.jar` points at the previously published
-// baseline jar (downloaded and hash-verified beforehand by `release.artifact_verify`,
-// see `tools/release/README.md`); the task is skipped if it is not supplied (e.g. for
-// the first release). A local file path is used (rather than a Maven coordinate) to
-// avoid Gradle resolving the dependency back to this very project.
-import me.champeau.gradle.japicmp.JapicmpTask
-
-def japicmpBaselineJar = findProperty('japicmpBaselineJar')
-
-tasks.register('japicmpCheck', JapicmpTask) {
-    description = 'Compares the current public API against the published baseline jar'
-    onlyIf { japicmpBaselineJar != null }
-    
-    if (japicmpBaselineJar != null) {
-        oldClasspath.from(files(japicmpBaselineJar))
-    }
-    
-    newClasspath.from(tasks.named('jar').map { it.outputs.files })
-    dependsOn tasks.named('jar')
-    accessModifier = 'public'
-    onlyBinaryIncompatibleModified = false
-    failOnModification = false
-    ignoreMissingClasses = true
-    xmlOutputFile = file("${buildDir}/reports/japicmp/qilletni-core.xml")
 }
 
 // Guards a stable release publication from ever resolving a SNAPSHOT or

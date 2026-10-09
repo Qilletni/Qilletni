@@ -288,15 +288,10 @@ jobs:
         if: steps.previous.outputs.previous_version != ''
         run: |
           PREV="${{ steps.previous.outputs.previous_version }}"
-          CORE_URL="https://repo1.maven.org/maven2/dev/qilletni/impl/qilletni/${PREV}/qilletni-${PREV}.jar"
           API_URL="https://repo1.maven.org/maven2/dev/qilletni/api/qilletni-api/${PREV}/qilletni-api-${PREV}.jar"
-          curl -sf --retry 5 --retry-delay 10 "$CORE_URL" -o "/tmp/qilletni-baseline.jar"
-          curl -sf --retry 5 --retry-delay 10 "$CORE_URL.sha1" -o "/tmp/qilletni-baseline.jar.sha1"
           curl -sf --retry 5 --retry-delay 10 "$API_URL" -o "/tmp/qilletni-api-baseline.jar"
           curl -sf --retry 5 --retry-delay 10 "$API_URL.sha1" -o "/tmp/qilletni-api-baseline.jar.sha1"
-          echo "$(cat /tmp/qilletni-baseline.jar.sha1)  /tmp/qilletni-baseline.jar" | sha1sum -c -
           echo "$(cat /tmp/qilletni-api-baseline.jar.sha1)  /tmp/qilletni-api-baseline.jar" | sha1sum -c -
-          echo "core_jar=/tmp/qilletni-baseline.jar" >> "$GITHUB_OUTPUT"
           echo "api_jar=/tmp/qilletni-api-baseline.jar" >> "$GITHUB_OUTPUT"
 
       - name: Determine japicmp policy tier (prefer the release marker over Maven Central diffing)
@@ -313,12 +308,11 @@ jobs:
           fi
           echo "policy=$POLICY" >> "$GITHUB_OUTPUT"
 
-      # Root-qualified: an unqualified `japicmpCheck` would also run the API's,
-      # against the *core* baseline jar, overwriting its report with nonsense.
+      # Only qilletni-api is gated: core (dev.qilletni.impl) is an internal
+      # implementation, so its API is not a compatibility contract.
       - name: Run japicmp compatibility check (when a previous version exists)
         if: steps.previous.outputs.previous_version != ''
         run: |
-          ./gradlew :japicmpCheck -PjapicmpBaselineJar="${{ steps.baseline.outputs.core_jar }}"
           ./gradlew :qilletni-api:japicmpCheck -PjapicmpBaselineJar="${{ steps.baseline.outputs.api_jar }}"
 
       - name: Enforce japicmp policy (when a previous version exists)
@@ -329,9 +323,6 @@ jobs:
           if [[ -f "../../docs/migrations/${{ steps.check.outputs.version }}.md" ]]; then
             HAS_MIGRATION_DOC="--has-migration-doc"
           fi
-          node --import tsx src/cli.ts check-japicmp-report \
-            --report ../../build/reports/japicmp/qilletni-core.xml \
-            --policy "${{ steps.policy.outputs.policy }}" $HAS_MIGRATION_DOC
           node --import tsx src/cli.ts check-japicmp-report \
             --report ../../qilletni-api/build/reports/japicmp/qilletni-api.xml \
             --policy "${{ steps.policy.outputs.policy }}" $HAS_MIGRATION_DOC

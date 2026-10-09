@@ -164,6 +164,7 @@ public class WeightEntryImpl implements WeightEntry {
             case COLLECTION, ALBUM -> trackOrchestrator.getTrackFromOrderableType(orderableTypeState);
             case WEIGHTS -> trackOrchestrator.getTrackFromWeight(weights);
             case FUNCTION -> throw new UnsupportedOperationException("Function weight entry should use LazyWeightEntry");
+            case PLAYLIST -> throw new IllegalStateException("PLAYLIST weight entries are no longer supported");
         };
     }
 
@@ -186,6 +187,7 @@ public class WeightEntryImpl implements WeightEntry {
             case WEIGHTS ->
                     weights.getWeightEntries().stream().flatMap(weightEntry -> weightEntry.getAllTracks().stream()).toList();
             case FUNCTION -> Collections.emptyList();
+            case PLAYLIST -> throw new IllegalStateException("PLAYLIST weight entries are no longer supported");
         };
     }
 
@@ -202,6 +204,7 @@ public class WeightEntryImpl implements WeightEntry {
             case COLLECTION, ALBUM -> orderableTypeState.stringValue();
             case WEIGHTS -> weights.stringValue();
             case FUNCTION -> "function-call";
+            case PLAYLIST -> throw new IllegalStateException("PLAYLIST weight entries are no longer supported");
         };
     }
 

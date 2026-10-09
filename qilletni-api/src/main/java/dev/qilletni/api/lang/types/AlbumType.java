@@ -1,6 +1,7 @@
 package dev.qilletni.api.lang.types;
 
 import dev.qilletni.api.lang.types.album.AlbumDefinition;
+import dev.qilletni.api.lang.types.collection.CollectionOrder;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.music.Album;
 
@@ -86,4 +87,54 @@ public non-sealed interface AlbumType extends AnyType, OrderableTracksType {
      * @param album The {@link Album} instance to populate
      */
     void populateSpotifyData(Album album);
+
+    // The OrderableTracksType methods are defaults here so that existing AlbumType implementations stay compatible.
+
+    /**
+     * Retrieves the current ordering of the album when it is played, such as sequential or shuffled.
+     *
+     * @return The {@link CollectionOrder} representing the current ordering of the album
+     * @throws UnsupportedOperationException If the implementation doesn't support ordering
+     * @since 1.1.0
+     */
+    @Override
+    default CollectionOrder getOrder() {
+        throw new UnsupportedOperationException("getOrder is not supported by this " + getClass().getName());
+    }
+
+    /**
+     * Sets the ordering of the album when it is played, such as sequential or shuffled.
+     *
+     * @param order The {@link CollectionOrder} to set for the album
+     * @throws UnsupportedOperationException If the implementation doesn't support ordering
+     * @since 1.1.0
+     */
+    @Override
+    default void setOrder(CollectionOrder order) {
+        throw new UnsupportedOperationException("setOrder is not supported by this " + getClass().getName());
+    }
+
+    /**
+     * Gets the weights applied to the album.
+     *
+     * @return The weights applied to the album
+     * @throws UnsupportedOperationException If the implementation doesn't support weights
+     * @since 1.1.0
+     */
+    @Override
+    default WeightsType getWeights() {
+        throw new UnsupportedOperationException("getWeights is not supported by this " + getClass().getName());
+    }
+
+    /**
+     * Sets the weights for the album.
+     *
+     * @param weights The {@link WeightsType} object to be associated with the album
+     * @throws UnsupportedOperationException If the implementation doesn't support weights
+     * @since 1.1.0
+     */
+    @Override
+    default void setWeights(WeightsType weights) {
+        throw new UnsupportedOperationException("setWeights is not supported by this " + getClass().getName());
+    }
 }

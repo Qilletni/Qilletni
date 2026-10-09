@@ -86,6 +86,18 @@ tasks.register('japicmpCheck', JapicmpTask) {
     onlyBinaryIncompatibleModified = false
     failOnModification = false
     ignoreMissingClasses = true
+    // japicmp (0.23.1) reports METHOD_ADDED_TO_INTERFACE for a new method that overrides
+    // a method that is also new in a superinterface, even when the override is a `default`
+    // method, so these 1.1.0 compatibility defaults are flagged as breaking although existing
+    // implementations still compile. Remove these once the baseline is 1.1.0 or later, as
+    // the methods are then no longer new.
+    methodExcludes = [
+        'dev.qilletni.api.lang.types.AlbumType#getOrder()',
+        'dev.qilletni.api.lang.types.AlbumType#setOrder(dev.qilletni.api.lang.types.collection.CollectionOrder)',
+        'dev.qilletni.api.lang.types.AlbumType#getWeights()',
+        'dev.qilletni.api.lang.types.AlbumType#setWeights(dev.qilletni.api.lang.types.WeightsType)',
+        'dev.qilletni.api.music.orchestration.CollectionState#getOrderableType()',
+    ]
     xmlOutputFile = file("${buildDir}/reports/japicmp/qilletni-api.xml")
 }
 

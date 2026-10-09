@@ -1,0 +1,118 @@
+name: API Compatibility
+
+# Runs the same japicmp gate as `build-and-publish` in release.yml, but on the
+# release-preparation PR, so a bump that is too small for the API changes
+# fails before the PR is merged and tagged rather than after. Without a
+# `release/pending-release.json` marker in the PR, the gate is skipped (and
+# still reports success, so this job can be a required status check).
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  japicmp:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - name: Detect a release-preparation PR
+        id: marker
+        run: |
+          if [[ -f release/pending-release.json ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No release/pending-release.json marker; not a release PR, skipping the japicmp gate."
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK
+        if: steps.marker.outputs.is_release == 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+        if: steps.marker.outputs.is_release == 'true'
+
+      - uses: actions/setup-node@v7
+        if: steps.marker.outputs.is_release == 'true'
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        if: steps.marker.outputs.is_release == 'true'
+        working-directory: tools/release
+        run: npm ci
+
+      - name: Read the release version and policy tier from the marker
+        id: policy
+        if: steps.marker.outputs.is_release == 'true'
+        working-directory: tools/release
+        run: |
+          VERSION=$(node --import tsx src/cli.ts get-property --file ../../gradle.properties --key qilletniVersion)
+          node --import tsx src/cli.ts check-release-marker \
+            --marker ../../release/pending-release.json \
+            --expected-component qilletni-core \
+            --expected-version "$VERSION"
+          POLICY=$(node --import tsx src/cli.ts read-marker-bump --marker ../../release/pending-release.json)
+          echo "Release $VERSION, japicmp policy: $POLICY"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "policy=$POLICY" >> "$GITHUB_OUTPUT"
+
+      - name: Determine previous released version
+        id: previous
+        if: steps.marker.outputs.is_release == 'true'
+        run: |
+          curl -sf "https://repo1.maven.org/maven2/dev/qilletni/impl/qilletni/maven-metadata.xml" -o "$RUNNER_TEMP/maven-metadata.xml"
+          PREVIOUS=$(grep -oP '(?<=<release>)[^<]+' "$RUNNER_TEMP/maven-metadata.xml" || true)
+          if [[ -z "$PREVIOUS" ]]; then
+            echo "No previously released version found (first release); skipping japicmp gate."
+          fi
+          echo "previous_version=$PREVIOUS" >> "$GITHUB_OUTPUT"
+
+      - name: Download baseline jar
+        id: baseline
+        if: steps.previous.outputs.previous_version != ''
+        run: |
+          PREV="${{ steps.previous.outputs.previous_version }}"
+          API_URL="https://repo1.maven.org/maven2/dev/qilletni/api/qilletni-api/${PREV}/qilletni-api-${PREV}.jar"
+          API_JAR="$RUNNER_TEMP/qilletni-api-baseline.jar"
+          curl -sf --retry 5 --retry-delay 10 "$API_URL" -o "$API_JAR"
+          curl -sf --retry 5 --retry-delay 10 "$API_URL.sha1" -o "$API_JAR.sha1"
+          echo "$(cat "$API_JAR.sha1")  $API_JAR" | sha1sum -c -
+          echo "api_jar=$API_JAR" >> "$GITHUB_OUTPUT"
+
+      # Only qilletni-api is gated, as in release.yml: core (dev.qilletni.impl)
+      # is an internal implementation.
+      - name: Run japicmp compatibility check
+        if: steps.previous.outputs.previous_version != ''
+        run: |
+          ./gradlew :qilletni-api:japicmpCheck -PjapicmpBaselineJar="${{ steps.baseline.outputs.api_jar }}"
+
+      - name: Enforce japicmp policy
+        if: steps.previous.outputs.previous_version != ''
+        working-directory: tools/release
+        run: |
+          HAS_MIGRATION_DOC=""
+          if [[ -f "../../docs/migrations/${{ steps.policy.outputs.version }}.md" ]]; then
+            HAS_MIGRATION_DOC="--has-migration-doc"
+          fi
+          if ! node --import tsx src/cli.ts check-japicmp-report \
+              --report ../../qilletni-api/build/reports/japicmp/qilletni-api.xml \
+              --policy "${{ steps.policy.outputs.policy }}" $HAS_MIGRATION_DOC; then
+            echo "::error::The '${{ steps.policy.outputs.policy }}' bump does not permit these API changes. Close this PR, delete its branch, and run Release - Prepare again with a larger bump (major also needs docs/migrations/${{ steps.policy.outputs.version }}.md)."
+            exit 1
+          fi

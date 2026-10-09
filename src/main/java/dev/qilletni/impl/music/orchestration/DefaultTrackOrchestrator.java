@@ -12,6 +12,7 @@ import dev.qilletni.api.lang.types.weights.WeightUtils;
 import dev.qilletni.api.music.MusicCache;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Track;
+import dev.qilletni.api.music.orchestration.CollectionState;
 import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.api.music.orchestration.TrackOrchestrator;
 import dev.qilletni.api.music.play.PlayActor;
@@ -102,6 +103,12 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
         LOGGER.debug("Play album: {} with limit: {}", albumType.getAlbum().getName(), collectionLimit);
 
         playOrderableLimited(albumType, collectionLimit);
+    }
+
+    @Override
+    @SuppressWarnings("removal")
+    public Track getTrackFromCollection(CollectionState collectionState) {
+        return getTrackFromOrderableType(collectionState);
     }
 
     @Override

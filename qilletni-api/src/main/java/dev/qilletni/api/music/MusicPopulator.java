@@ -14,15 +14,22 @@ public interface MusicPopulator {
      * wait until necessary.
      * 
      * @param eagerMusicLoad Whether to enable eager loading.
+     * @throws UnsupportedOperationException If the implementation doesn't support changing eager loading
+     * @since 1.1.0
      */
-    void setEagerMusicLoad(boolean eagerMusicLoad);
+    default void setEagerMusicLoad(boolean eagerMusicLoad) {
+        throw new UnsupportedOperationException("setEagerMusicLoad is not supported by this " + getClass().getName());
+    }
 
     /**
      * Gets whether eager loading is enabled.
      * 
-     * @return Whether eager loading is enabled.
+     * @return Whether eager loading is enabled. Defaults to <code>false</code>.
+     * @since 1.1.0
      */
-    boolean getEagerMusicLoad();
+    default boolean getEagerMusicLoad() {
+        return false;
+    }
 
     /**
      * If eager loading is enabled, the given song is populated via {@link #populateSong(SongType)}.

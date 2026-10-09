@@ -3,10 +3,10 @@ package dev.qilletni.impl.music.factories;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.factories.CollectionStateFactory;
-import dev.qilletni.api.music.orchestration.OrderableTypeState;
+import dev.qilletni.api.music.orchestration.CollectionState;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lang.types.orderable.OrderableTracksTypeInitializer;
-import dev.qilletni.impl.music.orchestration.OrderableTypeStateImpl;
+import dev.qilletni.impl.music.orchestration.CollectionStateImpl;
 
 public class CollectionStateFactoryImpl implements CollectionStateFactory {
 
@@ -19,7 +19,8 @@ public class CollectionStateFactoryImpl implements CollectionStateFactory {
     }
 
     @Override
-    public OrderableTypeState createFromCollection(CollectionType collection) {
-        return new OrderableTypeStateImpl(collection, new OrderableTracksTypeInitializer(musicPopulator, dynamicProvider.getMusicCache()));
+    @SuppressWarnings("removal")
+    public CollectionState createFromCollection(CollectionType collection) {
+        return new CollectionStateImpl(collection, new OrderableTracksTypeInitializer(musicPopulator, dynamicProvider.getMusicCache()));
     }
 }

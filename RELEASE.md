@@ -104,6 +104,13 @@ maintainer selects.
 | `minor` | the public API has an incompatible change |
 | `major` | the public API has an incompatible change and `docs/migrations/X.Y.Z.md` does not exist |
 
+In Qilletni, the japicmp gate checks only `qilletni-api`. Core (`qilletni`) is an internal
+implementation, so its API is not a compatibility contract.
+
+The `API Compatibility` workflow runs the same gate on the release PR, so a bump that is
+too small fails before the maintainer merges the PR. If it fails, close the PR, delete its
+branch, and prepare the release again with a larger bump.
+
 Not all repositories use the japicmp gate. Refer to the `RELEASE.md` of each repository.
 
 ## Publish a release
@@ -143,7 +150,7 @@ The job does these steps:
 2. It stops if a dependency has a `-SNAPSHOT` or dynamic version
    (`checkNoSnapshotDependencies`).
 3. It gets the last published version from Maven Central.
-4. It runs the japicmp gate for `qilletni` and `qilletni-api`. It uses the bump from the
+4. It runs the japicmp gate for `qilletni-api`. It uses the bump from the
    release marker. Refer to [Select the bump](#select-the-bump).
 5. It makes a CycloneDX SBOM for each artifact.
 6. It publishes the artifacts to Maven Central. The Central Portal publishes the

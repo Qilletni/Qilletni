@@ -19,8 +19,10 @@ components:
       - maven:
           group: dev.qilletni.impl
           artifact: qilletni
+        # Core is an internal implementation (including the ANTLR-generated parser);
+        # only qilletni-api is a compatibility contract, so core is not gated.
         japicmp:
-          enabled: true
+          enabled: false
           report: build/reports/japicmp/qilletni-core.xml
       - maven:
           group: dev.qilletni.api

@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## Added
+### Added
 
 - Album playing in both a direct `play` and in weights
 - Direct weights playing with limits (no loop; plays one track with no limit specified)
+
+### Deprecated
+
+- `CollectionState`, replaced by `OrderableTypeState`
+- `TrackOrchestrator#getTrackFromCollection`, replaced by `TrackOrchestrator#getTrackFromOrderableType`
+- `WeightTrackType.PLAYLIST`, which no weight entry uses anymore
 
 ## [1.0.2] - 2026-09-21
 

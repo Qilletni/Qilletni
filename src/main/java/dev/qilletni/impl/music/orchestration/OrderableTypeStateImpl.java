@@ -17,7 +17,7 @@ public class OrderableTypeStateImpl implements OrderableTypeState {
     private final OrderableTracksType orderableType;
     
     // Lazily initialized
-    private final List<Track> tracks;
+    protected final List<Track> tracks;
     private int currentIndex = 0;
 
     public OrderableTypeStateImpl(OrderableTracksType orderableTracksType, OrderableTracksTypeInitializer initializer) {

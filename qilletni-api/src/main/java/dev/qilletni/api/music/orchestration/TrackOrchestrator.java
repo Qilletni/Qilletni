@@ -25,8 +25,12 @@ public interface TrackOrchestrator {
      * 
      * @param weightsType The weights to play
      * @param collectionLimit The limit of tracks to play
+     * @throws UnsupportedOperationException If the implementation doesn't support playing weights directly
+     * @since 1.1.0
      */
-    void playWeights(WeightsType weightsType, CollectionLimit collectionLimit);
+    default void playWeights(WeightsType weightsType, CollectionLimit collectionLimit) {
+        throw new UnsupportedOperationException("playWeights is not supported by this " + getClass().getName());
+    }
     
     /**
      * Plays a collection of tracks. If looping, it will continue until the program exits.
@@ -49,25 +53,57 @@ public interface TrackOrchestrator {
      * 
      * @param albumType The album to play
      * @param loop Whether to loop the album. If `false`, the album will play each song once
+     * @throws UnsupportedOperationException If the implementation doesn't support playing albums
+     * @since 1.1.0
      */
-    void playAlbum(AlbumType albumType, boolean loop);
+    default void playAlbum(AlbumType albumType, boolean loop) {
+        throw new UnsupportedOperationException("playAlbum is not supported by this " + getClass().getName());
+    }
     
     /**
      * Plays an album, with a limit on the number of tracks to play.
      * 
      * @param albumType The album to play
      * @param collectionLimit The limit of tracks to play
+     * @throws UnsupportedOperationException If the implementation doesn't support playing albums
+     * @since 1.1.0
      */
-    void playAlbum(AlbumType albumType, CollectionLimit collectionLimit);
+    default void playAlbum(AlbumType albumType, CollectionLimit collectionLimit) {
+        throw new UnsupportedOperationException("playAlbum is not supported by this " + getClass().getName());
+    }
+
+    /**
+     * Gets a single track from a collection state. If the collection is sequential, it will return the next unplayed
+     * track in the collection.
+     * 
+     * @param collectionState The collection state to get the track from
+     * @return The track to play
+     * @deprecated Use {@link #getTrackFromOrderableType(OrderableTypeState)}
+     */
+    @Deprecated(since = "1.1.0", forRemoval = true)
+    @SuppressWarnings("removal")
+    Track getTrackFromCollection(CollectionState collectionState);
 
     /**
      * Gets a single track from an orderable type state. If this is sequential, it will return the next unplayed
      * track in the orderable type.
+     * <br>
+     * The default implementation only supports a {@link CollectionState}, delegating to
+     * {@link #getTrackFromCollection(CollectionState)}.
      * 
      * @param orderableTypeState The orderable type state to get the track from
      * @return The track to play
+     * @throws UnsupportedOperationException If the implementation doesn't support the given state
+     * @since 1.1.0
      */
-    Track getTrackFromOrderableType(OrderableTypeState orderableTypeState);
+    @SuppressWarnings("removal")
+    default Track getTrackFromOrderableType(OrderableTypeState orderableTypeState) {
+        if (orderableTypeState instanceof CollectionState collectionState) {
+            return getTrackFromCollection(collectionState);
+        }
+
+        throw new UnsupportedOperationException("getTrackFromOrderableType is only supported for a CollectionState by " + getClass().getName());
+    }
     
     /**
      * Selects a single track from a weight.
