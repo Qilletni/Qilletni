@@ -95,6 +95,34 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         return null;
     }
 
+    /**
+     * Runs {@code work} with {@code scope} as the current scope, without background tasks. Afterwards the scopes and
+     * stack trace are put back as they were, even if it throws partway through a function call.
+     */
+    public <T> T runInScope(Scope scope, Supplier<T> work) {
+        var scopeStack = symbolTable.getAllScopes();
+        var scopeDepth = scopeStack.size();
+        var stackTraceDepth = qilletniStackTrace.getStackTrace().size();
+        var backgroundTasksBlocked = backgroundTaskExecutor.blockBackgroundTasks(true);
+
+        symbolTable.swapScope(scope);
+        try {
+            return work.get();
+        } finally {
+            while (scopeStack.size() > scopeDepth + 1) {
+                scopeStack.pop();
+            }
+
+            symbolTable.unswapScope();
+
+            while (qilletniStackTrace.getStackTrace().size() > stackTraceDepth) {
+                qilletniStackTrace.popStackTraceElement();
+            }
+
+            backgroundTaskExecutor.blockBackgroundTasks(backgroundTasksBlocked);
+        }
+    }
+
     @Override
     public Object visitFunction_def(QilletniParser.Function_defContext ctx) {
         var currScope = symbolTable.currentScope();

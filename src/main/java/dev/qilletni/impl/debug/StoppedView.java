@@ -1,6 +1,11 @@
 package dev.qilletni.impl.debug;
 
+import dev.qilletni.api.lang.types.QilletniType;
+import dev.qilletni.impl.lang.QilletniVisitor;
+import dev.qilletni.impl.lang.exceptions.QilletniContextException;
+
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The program as seen from one stop. Only use it inside work given to {@link DebugController#submit}, which runs on
@@ -8,10 +13,12 @@ import java.util.List;
  */
 public final class StoppedView {
 
+    private final DebugController controller;
     private final List<Frame> frames;
     private final HandleRegistry handles;
 
-    StoppedView(List<Frame> frames, HandleRegistry handles) {
+    StoppedView(DebugController controller, List<Frame> frames, HandleRegistry handles) {
+        this.controller = controller;
         this.frames = frames;
         this.handles = handles;
     }
@@ -52,6 +59,51 @@ public final class StoppedView {
             case ValueHandle value -> ValueRows.children(value, filter, start, count, handles);
             default -> throw new IllegalArgumentException("Unknown or expired reference %d".formatted(variablesReference));
         };
+    }
+
+    /**
+     * Evaluates text in a frame's scope. Anything it defines or assigns stays, but nothing it runs stops the program.
+     *
+     * @param frameId The frame, or 0 for the innermost one
+     * @return The value as a row named by the text, or an empty row if there's no value
+     * @throws IllegalArgumentException If the frame isn't from this stop, or the text doesn't parse or fails to run
+     */
+    public DebugVariable evaluate(int frameId, String text, EvalMode mode) {
+        var frame = frameId <= 0 ? frames.getFirst() : handles.get(frameId, Frame.class);
+        if (frame.kind() == Frame.Kind.NATIVE || frame.scope() == null || frame.visitor() == null) {
+            throw new IllegalArgumentException("Can't evaluate in a native frame");
+        }
+
+        var parsed = Evaluator.parse(text, mode);
+
+        Optional<QilletniType> result;
+        try {
+            result = controller.evaluating(() -> frame.visitor().runInScope(frame.scope(), () -> run(frame.visitor(), parsed, mode)));
+        } catch (RuntimeException | StackOverflowError e) {
+            throw new IllegalArgumentException(message(e), e);
+        }
+
+        return result.map(value -> ValueRows.row(text, value, mode == EvalMode.WATCH ? text : null, false, handles))
+                .orElseGet(() -> new DebugVariable(text, "", "", null, 0, 0, false));
+    }
+
+    private static Optional<QilletniType> run(QilletniVisitor visitor, Evaluator.Parsed parsed, EvalMode mode) {
+        return switch (parsed) {
+            case Evaluator.Expression(var expr) -> Optional.ofNullable(visitor.visitExpr(expr, mode == EvalMode.WATCH));
+            case Evaluator.Statements(var statements) -> {
+                statements.forEach(visitor::visitNode);
+                yield Optional.empty();
+            }
+        };
+    }
+
+    private static String message(Throwable e) {
+        if (e instanceof StackOverflowError) {
+            return "Stack overflow";
+        }
+
+        var message = e instanceof QilletniContextException context ? context.getOriginalMessage() : e.getMessage();
+        return message == null || message.isBlank() ? e.getClass().getSimpleName() : message;
     }
 
     private record ScopeHandle(Frame frame, DebugScope.Kind kind) {}

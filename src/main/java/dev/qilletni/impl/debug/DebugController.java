@@ -16,6 +16,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Owns everything about a debugged execution. Hooks are called on the interpreter thread; the public methods may be
@@ -62,6 +63,12 @@ public class DebugController implements ExecutionHooks {
      * The depth when the step in progress started.
      */
     private int stepDepth;
+
+    /**
+     * How many evaluations are running, only touched on the interpreter thread. While above 0 no hook stops or
+     * changes a frame.
+     */
+    private int suppressed;
 
     private volatile DebugEventListener eventListener;
 
@@ -205,6 +212,10 @@ public class DebugController implements ExecutionHooks {
             throw new DebugAbortedException();
         }
 
+        if (suppressed > 0) {
+            return;
+        }
+
         // Lines typed into the breakpoint() REPL aren't parsed by the runner, so they have no source
         if (source == null) {
             return;
@@ -255,6 +266,10 @@ public class DebugController implements ExecutionHooks {
 
     @Override
     public void functionEntered(FunctionType function, Scope callerScope, QilletniVisitor visitor) {
+        if (suppressed > 0) {
+            return;
+        }
+
         var caller = frames.top();
         if (caller != null) {
             caller.callMade(callerScope);
@@ -267,14 +282,31 @@ public class DebugController implements ExecutionHooks {
 
     @Override
     public void functionExited() {
+        if (suppressed > 0) {
+            return;
+        }
+
         frames.pop();
+    }
+
+    /**
+     * Runs an evaluation on the interpreter thread while it is stopped. Nothing it runs stops the program or changes
+     * the stopped frames.
+     */
+    <T> T evaluating(Supplier<T> work) {
+        suppressed++;
+        try {
+            return work.get();
+        } finally {
+            suppressed--;
+        }
     }
 
     /**
      * Stops the interpreter thread, serving submitted work until resumed.
      */
     private void suspend(String reason, List<Integer> hitBreakpointIds) {
-        var view = new StoppedView(frames.snapshot(), new HandleRegistry(nextHandleId));
+        var view = new StoppedView(this, frames.snapshot(), new HandleRegistry(nextHandleId));
         var current = new Suspension(view, new LinkedBlockingQueue<>());
 
         stepMode = StepMode.NONE;
@@ -312,6 +344,7 @@ public class DebugController implements ExecutionHooks {
                 try {
                     work.run().run();
                 } catch (DebugAbortedException e) {
+                    work.fail().accept(e);
                     throw e;
                 } catch (Throwable e) {
                     work.fail().accept(e);

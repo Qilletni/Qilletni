@@ -79,6 +79,17 @@ public class BackgroundTaskExecutorImpl implements BackgroundTaskExecutor {
         }
     }
 
+    /**
+     * Stops or allows triggered background tasks running at the next expression.
+     *
+     * @return If they were blocked before
+     */
+    public boolean blockBackgroundTasks(boolean block) {
+        var previous = blockBackgroundTaskExecution;
+        blockBackgroundTaskExecution = block;
+        return previous;
+    }
+
     @Override
     public void checkAndRunBackgroundTasks() {
         if (!blockBackgroundTaskExecution && !triggeredConditions.isEmpty()) {
