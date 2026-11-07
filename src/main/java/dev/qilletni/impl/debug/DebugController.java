@@ -37,17 +37,31 @@ public class DebugController implements ExecutionHooks {
 
     private int nextBreakpointId = 1;
 
-    private static final WorkItem RESUME = new WorkItem(() -> {}, e -> {});
-    private static final WorkItem ABORT = new WorkItem(() -> {}, e -> {});
+    private static final QueueItem ABORT = new Abort();
 
     private volatile boolean aborted;
 
     private final Object suspensionLock = new Object();
 
     /**
-     * Set while the interpreter thread is stopped and serving work, guarded by {@link #suspensionLock}.
+     * Set while the interpreter thread is stopped and accepting work, guarded by {@link #suspensionLock}.
      */
     private Suspension suspension;
+
+    /**
+     * Stop at the next statement. Set only while running, guarded by {@link #suspensionLock} for writes.
+     */
+    private volatile boolean pauseRequested;
+
+    /**
+     * The step in progress, only touched on the interpreter thread.
+     */
+    private StepMode stepMode = StepMode.NONE;
+
+    /**
+     * The depth when the step in progress started.
+     */
+    private int stepDepth;
 
     private volatile DebugEventListener eventListener;
 
@@ -122,12 +136,25 @@ public class DebugController implements ExecutionHooks {
     }
 
     /**
-     * Resumes the program if it is stopped.
+     * Resumes the program if it is stopped. Work submitted after this fails right away.
      */
-    public void resume() {
+    public void resume(StepMode mode) {
         synchronized (suspensionLock) {
             if (suspension != null) {
-                suspension.queue().add(RESUME);
+                suspension.queue().add(new Resume(mode));
+                suspension = null;
+            }
+        }
+    }
+
+    /**
+     * Stops the program at its next statement if it is running. A native that is blocked, such as one waiting for
+     * input, isn't interrupted.
+     */
+    public void pause() {
+        synchronized (suspensionLock) {
+            if (suspension == null) {
+                pauseRequested = true;
             }
         }
     }
@@ -193,7 +220,7 @@ public class DebugController implements ExecutionHooks {
             entrySource = null;
         }
 
-        if (sameLine || (!entry && (breakpoints.isEmpty() || source.path() == null))) {
+        if (sameLine || (!entry && stepMode == StepMode.NONE && !pauseRequested && breakpoints.isEmpty())) {
             return;
         }
 
@@ -201,9 +228,22 @@ public class DebugController implements ExecutionHooks {
         var id = lineIds == null ? null : lineIds.get(line);
         if (id != null) {
             suspend("breakpoint", List.of(id));
+        } else if (pauseRequested) {
+            suspend("pause", List.of());
+        } else if (stepReached()) {
+            suspend("step", List.of());
         } else if (entry) {
             suspend("entry", List.of());
         }
+    }
+
+    private boolean stepReached() {
+        return switch (stepMode) {
+            case NONE -> false;
+            case STEP_IN -> true;
+            case NEXT -> frames.depth() <= stepDepth;
+            case STEP_OUT -> frames.depth() < stepDepth;
+        };
     }
 
     /**
@@ -237,9 +277,12 @@ public class DebugController implements ExecutionHooks {
         var view = new StoppedView(frames.snapshot(), new HandleRegistry(nextHandleId));
         var current = new Suspension(view, new LinkedBlockingQueue<>());
 
+        stepMode = StepMode.NONE;
+
         // Accept work before the IDE hears about the stop, so its first request can't be refused
         synchronized (suspensionLock) {
             suspension = current;
+            pauseRequested = false;
         }
 
         try {
@@ -255,7 +298,9 @@ public class DebugController implements ExecutionHooks {
 
             while (true) {
                 var item = current.queue().take();
-                if (item == RESUME) {
+                if (item instanceof Resume(StepMode mode)) {
+                    stepMode = mode;
+                    stepDepth = frames.depth();
                     break;
                 }
 
@@ -263,42 +308,60 @@ public class DebugController implements ExecutionHooks {
                     throw new DebugAbortedException();
                 }
 
+                var work = (WorkItem) item;
                 try {
-                    item.run().run();
+                    work.run().run();
                 } catch (RuntimeException e) {
-                    item.fail().accept(e);
+                    work.fail().accept(e);
                 }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
             synchronized (suspensionLock) {
-                suspension = null;
+                if (suspension == current) {
+                    suspension = null;
+                }
             }
 
-            WorkItem leftover;
+            QueueItem leftover;
             while ((leftover = current.queue().poll()) != null) {
-                if (leftover != RESUME && leftover != ABORT) {
-                    leftover.fail().accept(new IllegalStateException("The program resumed"));
+                if (leftover instanceof WorkItem work) {
+                    work.fail().accept(new IllegalStateException("The program resumed"));
                 }
             }
         }
     }
 
     /**
-     * A unit of work for the stopped interpreter thread, or one of the {@link #RESUME} and {@link #ABORT} sentinels.
+     * Something for the stopped interpreter thread to take from its queue.
+     */
+    private sealed interface QueueItem permits WorkItem, Resume, Abort {}
+
+    /**
+     * A unit of work for the stopped interpreter thread.
      *
      * @param run  Runs the work and completes its future, on the interpreter thread
      * @param fail Completes the future exceptionally, if {@code run} throws or the program resumes before it runs
      */
-    private record WorkItem(Runnable run, Consumer<Throwable> fail) {}
+    private record WorkItem(Runnable run, Consumer<Throwable> fail) implements QueueItem {}
+
+    /**
+     * Leaves the work loop and keeps running in the given mode.
+     */
+    private record Resume(StepMode mode) implements QueueItem {}
+
+    /**
+     * Leaves the work loop by throwing {@link DebugAbortedException}.
+     */
+    private record Abort() implements QueueItem {}
 
     /**
      * One stop of the program. A new one is created for every stop, so work queued for an earlier stop can never
      * run in a later one.
      *
      * @param view  The program as seen from this stop, including its frame ids and variable references
-     * @param queue Work for the interpreter thread to run until it takes {@link #RESUME} or {@link #ABORT}
+     * @param queue Work for the interpreter thread to run until it takes a {@link Resume} or {@link #ABORT}
      */
-    private record Suspension(StoppedView view, BlockingQueue<WorkItem> queue) {}
+    private record Suspension(StoppedView view, BlockingQueue<QueueItem> queue) {}
 }
