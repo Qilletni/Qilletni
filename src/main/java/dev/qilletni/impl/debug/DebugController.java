@@ -49,6 +49,11 @@ public class DebugController implements ExecutionHooks {
     private volatile DebugEventListener eventListener;
 
     /**
+     * The main file while waiting to stop on its first statement, cleared once it is reached.
+     */
+    private volatile SourceId entrySource;
+
+    /**
      * The top level, then one entry per function call, innermost first. Only touched on the interpreter thread.
      */
     private final Deque<CallFrame> callFrames = new ArrayDeque<>(List.of(new CallFrame(null)));
@@ -165,16 +170,31 @@ public class DebugController implements ExecutionHooks {
         frame.lastLine = line;
         frame.lastColumn = column;
 
-        if (sameLine || breakpoints.isEmpty() || source.path() == null) {
+        var entry = entrySource != null && entrySource.equals(source);
+        if (entry) {
+            entrySource = null;
+        }
+
+        if (sameLine || (!entry && (breakpoints.isEmpty() || source.path() == null))) {
             return;
         }
 
-        var lineIds = breakpoints.get(source.path());
+        var lineIds = source.path() == null ? null : breakpoints.get(source.path());
         var id = lineIds == null ? null : lineIds.get(line);
+        var location = new StopLocation(source, line, column, frame.functionName);
 
         if (id != null) {
-            suspend(new StopLocation(source, line, column, frame.functionName), "breakpoint", List.of(id));
+            suspend(location, "breakpoint", List.of(id));
+        } else if (entry) {
+            suspend(location, "entry", List.of());
         }
+    }
+
+    /**
+     * Stops with reason {@code entry} at the first statement of {@code mainSource}. Call before the program starts.
+     */
+    public void stopOnEntry(SourceId mainSource) {
+        entrySource = mainSource;
     }
 
     @Override
