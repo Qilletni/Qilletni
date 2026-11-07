@@ -2,6 +2,7 @@ package dev.qilletni.impl.lang.types;
 
 import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
+import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.SpotifyDataUtility;
 import dev.qilletni.api.lang.types.album.AlbumDefinition;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
@@ -9,6 +10,8 @@ import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
+
+import java.util.Optional;
 
 public final class AlbumTypeImpl implements AlbumType {
 
@@ -95,13 +98,20 @@ public final class AlbumTypeImpl implements AlbumType {
                 .map(artist -> (QilletniType) artistEntity.createInstance(new StringTypeImpl(artist.getId()), new StringTypeImpl(artist.getName())))
                 .toList();
 
-        return artistsType = new ListTypeImpl(QilletniTypeClass.createListOfType(artistEntity.getQilletniTypeClass()), artistEntities);
+        return artistsType = new ListTypeImpl(artistEntity.getQilletniTypeClass(), artistEntities);
     }
 
     @Override
     public Album getAlbum() {
         var album = dynamicAlbum.get();
         return SpotifyDataUtility.requireNonNull(album, "Internal Album is null, #populateSpotifyData must be invoked prior to getting API data");
+    }
+    
+    /**
+     * @return The album for the current service provider, if already loaded. Never fetches
+     */
+    public Optional<Album> peekAlbum() {
+        return dynamicAlbum.peek();
     }
 
     @Override

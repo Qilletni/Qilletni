@@ -1,15 +1,14 @@
 package dev.qilletni.impl.debug;
 
+import dev.qilletni.api.lang.types.AlbumType;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.SongType;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
+import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Track;
-import dev.qilletni.impl.lang.types.IntTypeImpl;
-import dev.qilletni.impl.lang.types.ListTypeImpl;
-import dev.qilletni.impl.lang.types.SongTypeImpl;
-import dev.qilletni.impl.lang.types.StringTypeImpl;
+import dev.qilletni.impl.lang.types.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,12 +34,13 @@ final class MusicValues {
     static String summary(QilletniType value) {
         return switch (value) {
             case SongType song -> songSummary(song);
+            case AlbumType album -> albumSummary(album);
             case null, default -> null;
         };
     }
 
     static boolean hasChildren(QilletniType value) {
-        return value instanceof SongType;
+        return value instanceof SongType || value instanceof AlbumType;
     }
 
     /**
@@ -49,6 +49,7 @@ final class MusicValues {
     static List<Member> members(QilletniType value, MusicServices services) {
         return switch (value) {
             case SongType song -> songMembers(song, services);
+            case AlbumType album -> albumMembers(album, services);
             case null, default -> List.of();
         };
     }
@@ -68,6 +69,21 @@ final class MusicValues {
         };
     }
 
+    private static String albumSummary(AlbumType albumType) {
+        var album = peekAlbum(albumType);
+        if (album.isPresent()) {
+            var artist = album.get().getArtist();
+            return artist == null ? ValueFormatter.quote(album.get().getName())
+                    : "%s by %s".formatted(ValueFormatter.quote(album.get().getName()), ValueFormatter.quote(artist.getName()));
+        }
+
+        return switch (albumType.getAlbumDefinition()) {
+            case TITLE_ARTIST -> "%s by %s (not loaded)".formatted(ValueFormatter.quote(albumType.getSuppliedTitle()), ValueFormatter.quote(albumType.getSuppliedArtist()));
+            case URL -> "%s (not loaded)".formatted(ValueFormatter.quote(albumType.getSuppliedUrl()));
+            case PREPOPULATED -> "(not loaded)";
+        };
+    }
+
     private static List<Member> songMembers(SongType song, MusicServices services) {
         Track track;
         try {
@@ -83,7 +99,7 @@ final class MusicValues {
         }
 
         var members = new ArrayList<Member>();
-        members.add(new Member("title", new StringTypeImpl(track.getName()), ".getTitle()"));
+        members.add(new Member("title", new StringTypeImpl(track.getName()), ".getName()"));
         members.addAll(artistMembers(song, track, services.entities()));
         members.add(new Member("album", song.getAlbum(), ".getAlbum()"));
         members.add(new Member("duration", new IntTypeImpl(track.getDuration()), ".getDuration()"));
@@ -91,6 +107,32 @@ final class MusicValues {
 
         if (song.getSuppliedUrl() != null) {
             members.add(new Member("url", new StringTypeImpl(song.getSuppliedUrl()), ".getUrl()"));
+        }
+
+        return members;
+    }
+
+    private static List<Member> albumMembers(AlbumType albumType, MusicServices services) {
+        Album album;
+        try {
+            if (peekAlbum(albumType).isEmpty()) {
+                services.populator().populateAlbum(albumType);
+            }
+
+            album = albumType.getAlbum();
+        } catch (RuntimeException e) {
+            var members = new ArrayList<>(suppliedAlbumMembers(albumType));
+            members.add(new Member("error", new StringTypeImpl(ErrorMessages.of(e)), null));
+            return members;
+        }
+
+        var members = new ArrayList<Member>();
+        members.add(new Member("title", new StringTypeImpl(album.getName()), ".getTitle()"));
+        members.addAll(artistMembers(albumType, album, services.entities()));
+        members.add(new Member("id", new StringTypeImpl(album.getId()), ".getId()"));
+
+        if (albumType.getSuppliedUrl() != null) {
+            members.add(new Member("url", new StringTypeImpl(albumType.getSuppliedUrl()), ".getUrl()"));
         }
 
         return members;
@@ -107,6 +149,17 @@ final class MusicValues {
         }
     }
 
+    private static List<Member> artistMembers(AlbumType albumType, Album album, EntityDefinitionManager entities) {
+        try {
+            return List.of(new Member("artist", albumType.getArtist(entities), ".getArtist()"),
+                    new Member("artists", albumType.getArtists(entities), ".getAllArtists()"));
+        } catch (RuntimeException e) {
+            var names = album.getArtists().stream().map(artist -> (QilletniType) new StringTypeImpl(artist.getName())).toList();
+            return List.of(new Member("artist", new StringTypeImpl(album.getArtist().getName()), null),
+                    new Member("artists", new ListTypeImpl(QilletniTypeClass.STRING, names), null));
+        }
+    }
+
     private static List<Member> suppliedSongMembers(SongType song) {
         return switch (song.getSongDefinition()) {
             case TITLE_ARTIST -> List.of(new Member("title", new StringTypeImpl(song.getSuppliedTitle()), null),
@@ -116,9 +169,26 @@ final class MusicValues {
         };
     }
 
+    private static List<Member> suppliedAlbumMembers(AlbumType albumType) {
+        return switch (albumType.getAlbumDefinition()) {
+            case TITLE_ARTIST -> List.of(new Member("title", new StringTypeImpl(albumType.getSuppliedTitle()), null),
+                    new Member("artist", new StringTypeImpl(albumType.getSuppliedArtist()), null));
+            case URL -> List.of(new Member("url", new StringTypeImpl(albumType.getSuppliedUrl()), ".getUrl()"));
+            case PREPOPULATED -> List.of();
+        };
+    }
+
     private static Optional<Track> peekTrack(SongType song) {
         try {
             return song instanceof SongTypeImpl impl ? impl.peekTrack() : Optional.empty();
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Album> peekAlbum(AlbumType album) {
+        try {
+            return album instanceof AlbumTypeImpl impl ? impl.peekAlbum() : Optional.empty();
         } catch (RuntimeException e) {
             return Optional.empty();
         }

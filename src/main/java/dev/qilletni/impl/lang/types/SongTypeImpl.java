@@ -115,7 +115,7 @@ public final class SongTypeImpl implements SongType {
                 .map(artist -> (QilletniType) artistEntity.createInstance(new StringTypeImpl(artist.getId()), new StringTypeImpl(artist.getName())))
                 .toList();
 
-        return artistsType = new ListTypeImpl(QilletniTypeClass.createListOfType(artistEntity.getQilletniTypeClass()), artistEntities);
+        return artistsType = new ListTypeImpl(artistEntity.getQilletniTypeClass(), artistEntities);
     }
 
     @Override
