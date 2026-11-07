@@ -13,6 +13,8 @@ import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
+import java.util.Optional;
+
 public final class SongTypeImpl implements SongType {
 
     private final DynamicProvider dynamicProvider;
@@ -122,6 +124,13 @@ public final class SongTypeImpl implements SongType {
         return SpotifyDataUtility.requireNonNull(track, "Internal Track is null, #populateSpotifyData must be invoked for the current provider (%s) prior to getting API data".formatted(dynamicProvider.getCurrentProvider().getName()));
     }
     
+    /**
+     * @return The track for the current service provider, if already loaded. Never fetches
+     */
+    public Optional<Track> peekTrack() {
+        return dynamicTrack.peek();
+    }
+
     @Override
     public boolean isSpotifyDataPopulated() {
         return dynamicTrack.isPopulated();

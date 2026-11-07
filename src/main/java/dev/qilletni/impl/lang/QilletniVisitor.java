@@ -95,6 +95,14 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         return null;
     }
 
+    public MusicPopulator getMusicPopulator() {
+        return musicPopulator;
+    }
+
+    public EntityDefinitionManager getEntityDefinitionManager() {
+        return entityDefinitionManager;
+    }
+
     /**
      * Runs {@code work} with {@code scope} as the current scope, without background tasks. Afterwards the scopes and
      * stack trace are put back as they were, even if it throws partway through a function call.

@@ -4,6 +4,7 @@ import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.impl.lang.QilletniVisitor;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -55,7 +56,7 @@ public final class StoppedView {
             case ScopeHandle scope -> VariableReader.variables(scope.frame(), scope.kind()).stream()
                     .map(binding -> ValueRows.row(binding.name(), binding.value(), binding.name(), binding.property(), handles))
                     .toList();
-            case ValueHandle value -> ValueRows.children(value, filter, start, count, handles);
+            case ValueHandle value -> ValueRows.children(value, filter, start, count, handles, musicServices());
             default -> throw new IllegalArgumentException("Unknown or expired reference %d".formatted(variablesReference));
         };
     }
@@ -84,6 +85,12 @@ public final class StoppedView {
 
         return result.map(value -> ValueRows.row(text, value, mode == EvalMode.WATCH ? text : null, false, handles))
                 .orElseGet(() -> new DebugVariable(text, "", "", null, 0, 0, false));
+    }
+
+    private MusicValues.MusicServices musicServices() {
+        return frames.stream().map(Frame::visitor).filter(Objects::nonNull).findFirst()
+                .map(visitor -> new MusicValues.MusicServices(visitor.getMusicPopulator(), visitor.getEntityDefinitionManager()))
+                .orElse(null);
     }
 
     private static Optional<QilletniType> run(QilletniVisitor visitor, Evaluator.Parsed parsed, EvalMode mode) {

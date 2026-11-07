@@ -39,7 +39,7 @@ final class ValueRows {
      * @param start The first list item to return
      * @param count How many list items to return, or 0 for all of them
      */
-    static List<DebugVariable> children(ValueHandle handle, ChildFilter filter, int start, int count, HandleRegistry handles) {
+    static List<DebugVariable> children(ValueHandle handle, ChildFilter filter, int start, int count, HandleRegistry handles, MusicValues.MusicServices services) {
         return switch (handle.value()) {
             case ListType list when filter != ChildFilter.NAMED -> items(list, handle.evaluateName(), start, count, handles);
             case EntityType entity when filter != ChildFilter.INDEXED && stdMap(entity) != null -> entries(stdMap(entity)).stream()
@@ -47,6 +47,9 @@ final class ValueRows {
                     .toList();
             case EntityType entity when filter != ChildFilter.INDEXED -> fields(entity).stream()
                     .map(field -> row(field.getName(), field.getValue(), child(handle.evaluateName(), "." + field.getName()), true, handles))
+                    .toList();
+            case QilletniType music when filter != ChildFilter.INDEXED && MusicValues.hasChildren(music) -> MusicValues.members(music, services).stream()
+                    .map(member -> row(member.name(), member.value(), member.accessor() == null ? null : child(handle.evaluateName(), member.accessor()), true, handles))
                     .toList();
             default -> List.of();
         };
@@ -83,6 +86,7 @@ final class ValueRows {
             case ListType list -> !list.getItems().isEmpty();
             case EntityType entity when stdMap(entity) != null -> !stdMap(entity).isEmpty();
             case EntityType entity -> !fields(entity).isEmpty();
+            case QilletniType music when MusicValues.hasChildren(music) -> true;
             case null, default -> false;
         };
     }

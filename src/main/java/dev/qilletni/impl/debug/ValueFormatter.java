@@ -11,6 +11,7 @@ import dev.qilletni.api.lang.types.StaticEntityType;
 import dev.qilletni.api.lang.types.StringType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -37,13 +38,21 @@ final class ValueFormatter {
             case IntType i -> i.stringValue();
             case DoubleType d -> d.stringValue();
             case BooleanType b -> b.stringValue();
-            case EntityType entity when ValueRows.stdMap(entity) != null -> depth == 0 ? "Map(size %d)".formatted(ValueRows.stdMap(entity).size()) : "Map(...)";
+            case EntityType entity when ValueRows.stdMap(entity) != null -> {
+                if (depth == 0) {
+                    Map<?, ?> map = ValueRows.stdMap(entity);
+                    yield "Map(size %d)".formatted(map != null ? map.size() : 0);
+                } else {
+                    yield "Map(...)";
+                }
+            }
             case EntityType entity when depth == 0 -> entityValue(entity);
             case EntityType entity -> "%s(...)".formatted(entity.getEntityDefinition().getTypeName());
             case JavaType javaType -> javaType.getOptionalReference(Object.class).map(ValueFormatter::className).orElse("null");
             case StaticEntityType entity -> entity.getEntityDefinition().getTypeName();
             case ListType list when depth == 0 -> listValue(list);
             case ListType list -> list.getItems().isEmpty() ? "[]" : "[...]";
+            case QilletniType music when MusicValues.summary(music) != null -> MusicValues.summary(music);
             default -> type(value);
         };
     }
