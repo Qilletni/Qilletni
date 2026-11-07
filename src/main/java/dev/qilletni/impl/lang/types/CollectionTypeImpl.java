@@ -1,5 +1,6 @@
 package dev.qilletni.impl.lang.types;
 
+import dev.qilletni.api.auth.ServiceProvider;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.lang.types.EntityType;
 import dev.qilletni.api.lang.types.QilletniType;
@@ -8,6 +9,7 @@ import dev.qilletni.api.lang.types.collection.CollectionDefinition;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
+import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
@@ -17,6 +19,8 @@ import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 import dev.qilletni.impl.music.DummyPlaylist;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public final class CollectionTypeImpl implements CollectionType {
     private MusicPopulator musicPopulator;
@@ -120,6 +124,20 @@ public final class CollectionTypeImpl implements CollectionType {
     public Playlist getPlaylist() {
         var playlist = dynamicPlaylist.get();
         return SpotifyDataUtility.requireNonNull(playlist, "Internal Playlist is null, #populateSpotifyData must be invoked prior to getting API data");
+    }
+
+    /**
+     * @return The playlist for the current service provider, if already loaded. Never fetches
+     */
+    public Optional<Playlist> peekPlaylist() {
+        return dynamicPlaylist.peek();
+    }
+
+    /**
+     * @return The playlist for any service provider it has been loaded for. Never fetches
+     */
+    public Optional<Map.Entry<ServiceProvider, Playlist>> peekAnyPlaylist() {
+        return dynamicPlaylist.peekAny();
     }
 
     @Override
