@@ -2,7 +2,6 @@ package dev.qilletni.impl.debug;
 
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.impl.lang.QilletniVisitor;
-import dev.qilletni.impl.lang.exceptions.QilletniContextException;
 
 import java.util.List;
 import java.util.Optional;
@@ -80,7 +79,7 @@ public final class StoppedView {
         try {
             result = controller.evaluating(() -> frame.visitor().runInScope(frame.scope(), () -> run(frame.visitor(), parsed, mode)));
         } catch (RuntimeException | StackOverflowError e) {
-            throw new IllegalArgumentException(message(e), e);
+            throw new IllegalArgumentException(ErrorMessages.of(e), e);
         }
 
         return result.map(value -> ValueRows.row(text, value, mode == EvalMode.WATCH ? text : null, false, handles))
@@ -95,15 +94,6 @@ public final class StoppedView {
                 yield Optional.empty();
             }
         };
-    }
-
-    private static String message(Throwable e) {
-        if (e instanceof StackOverflowError) {
-            return "Stack overflow";
-        }
-
-        var message = e instanceof QilletniContextException context ? context.getOriginalMessage() : e.getMessage();
-        return message == null || message.isBlank() ? e.getClass().getSimpleName() : message;
     }
 
     private record ScopeHandle(Frame frame, DebugScope.Kind kind) {}

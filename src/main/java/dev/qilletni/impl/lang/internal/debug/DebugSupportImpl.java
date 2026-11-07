@@ -5,6 +5,7 @@ import dev.qilletni.impl.antlr.QilletniParser;
 import dev.qilletni.api.lang.internal.debug.DebugSupport;
 import dev.qilletni.api.lang.stack.QilletniStackTrace;
 import dev.qilletni.api.lang.table.SymbolTable;
+import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.exceptions.REPLErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -22,8 +23,14 @@ public class DebugSupportImpl implements DebugSupport {
     private QilletniStackTrace qilletniStackTrace;
     private int debugLineCount = 0; // The number of lines invoked via runDebugLine()
 
+    private ExecutionHooks executionHooks = ExecutionHooks.NONE;
+
     public DebugSupportImpl(boolean isDebugEnabled) {
         this.isDebugEnabled = isDebugEnabled;
+    }
+
+    public void setExecutionHooks(ExecutionHooks executionHooks) {
+        this.executionHooks = executionHooks;
     }
 
     public void setLastExecutedLine(String lastExecutedLine) {
@@ -89,6 +96,11 @@ public class DebugSupportImpl implements DebugSupport {
     @Override
     public boolean isInBreakpoint() {
         return insideBreakpoint;
+    }
+
+    @Override
+    public boolean debuggerBreakpoint() {
+        return executionHooks.breakpointCalled();
     }
 
 }

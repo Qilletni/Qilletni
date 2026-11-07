@@ -150,10 +150,14 @@ public class QilletniProgramRunner {
         
         if (debugSupport.isDebugEnabled()) {
             LOGGER.debug("Debugging enabled");
-            nativeFunctionHandler.addScopedInjectableInstanceByNames(debugSupport, List.of("dev.qilletni.lib.core.BreakpointFunctions", "dev.qilletni.lib.core.DebugFunctions"));
+            allowDebugSupportInjection();
         } else {
             LOGGER.debug("Debugging disabled");
         }
+    }
+
+    private void allowDebugSupportInjection() {
+        nativeFunctionHandler.addScopedInjectableInstanceByNames(debugSupport, List.of("dev.qilletni.lib.core.BreakpointFunctions", "dev.qilletni.lib.core.DebugFunctions"));
     }
 
     private static TypeAdapterRegistrar initializeTypeAdapterRegistrar(TypeAdapterRegistrar typeAdapterRegistrar, EntityInitializer entityInitializer, TypeConverter typeConverter, ListInitializer listInitializer) {
@@ -218,6 +222,12 @@ public class QilletniProgramRunner {
     public void setExecutionHooks(ExecutionHooks executionHooks) {
         this.executionHooks = executionHooks;
         nativeFunctionHandler.setExecutionHooks(executionHooks);
+        debugSupport.setExecutionHooks(executionHooks);
+
+        // An attached debugger handles breakpoint(), even without the debug package config
+        if (executionHooks != ExecutionHooks.NONE && !debugSupport.isDebugEnabled()) {
+            allowDebugSupportInjection();
+        }
     }
 
     public void importInitialFiles() {
@@ -240,16 +250,10 @@ public class QilletniProgramRunner {
      * before any Qilletni code runs. Run it with {@link #runProgram(ParsedProgram)}.
      */
     public ParsedProgram parseProgram(Path file) throws IOException {
-        var parent = file.getParent();
-        if (file.getParent() == null) {
-            LOGGER.debug("File '{}' has no parent", file);
-            parent = Paths.get("");
-        }
-
         var sourceId = SourceId.ofFile(file);
         var programContext = parse(CharStreams.fromString(Files.readString(file), file.getFileName().toString()), sourceId);
 
-        return new ParsedProgram(programContext, new ImportPathState(parent), sourceId);
+        return new ParsedProgram(programContext, new ImportPathState(file.toAbsolutePath().normalize()), sourceId);
     }
 
     public SymbolTable runProgram(ParsedProgram program) {
@@ -278,12 +282,33 @@ public class QilletniProgramRunner {
         return runProgram(charStream, pathState, globalScope, SourceId.ofName(charStream.getSourceName()));
     }
 
-    private static SourceId importedSourceId(ImportPathState pathState) {
+    private SourceId importedSourceId(ImportPathState pathState) throws IOException {
         if (pathState.libraryName() == null) {
+            if (Files.isRegularFile(pathState.path())) {
+                return SourceId.ofFile(pathState.path());
+            }
+
             return SourceId.ofName(pathState.path().getFileName().toString());
         }
 
+        var diskPath = libraryRegistrar.getLibrarySourceFileResolver().resolveDiskPath(pathState.libraryName(), pathState.path().toString().replace("\\", "/"));
+        if (diskPath.isPresent()) {
+            return SourceId.ofFile(diskPath.get());
+        }
+
         return SourceId.ofLibrary(pathState.libraryName(), pathState.path().toString());
+    }
+
+    /**
+     * Reads an imported file: from disk if it has no library and exists there, otherwise from its library or the
+     * classpath.
+     */
+    private String readImport(ImportPathState pathState) throws IOException {
+        if (pathState.libraryName() == null && Files.isRegularFile(pathState.path())) {
+            return Files.readString(pathState.path());
+        }
+
+        return libraryRegistrar.findLibraryByPath(pathState.libraryName(), pathState.path()).orElseThrow(FileNotFoundException::new);
     }
 
     private SymbolTable runProgram(CharStream charStream, ImportPathState pathState, Scope globalScope, SourceId sourceId) {
@@ -345,7 +370,7 @@ public class QilletniProgramRunner {
                 global = new ScopeImpl(globalScope, Scope.ScopeType.ALIASED_GLOBAL, "FG " + pathState.path());
             }
 
-            var symbolTable = runProgram(libraryRegistrar.findLibraryByPath(pathState.libraryName(), pathState.path()).orElseThrow(FileNotFoundException::new), pathState, global);
+            var symbolTable = runProgram(readImport(pathState), pathState, global);
 
             importCache.add(pathState);
 

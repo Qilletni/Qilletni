@@ -39,4 +39,18 @@ public interface ExecutionHooks {
     default void functionEntered(FunctionType function, Scope callerScope, QilletniVisitor visitor) {}
 
     default void functionExited() {}
+
+    /**
+     * An error is passing through a node on its way out. Called at every node it passes, innermost first.
+     */
+    default void errorRaised(RuntimeException error) {}
+
+    /**
+     * The std {@code breakpoint()} function was called.
+     *
+     * @return If a debugger handled it, so no REPL should open
+     */
+    default boolean breakpointCalled() {
+        return false;
+    }
 }

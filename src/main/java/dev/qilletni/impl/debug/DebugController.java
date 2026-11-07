@@ -34,6 +34,12 @@ public class DebugController implements ExecutionHooks {
      */
     private final Map<String, Map<Integer, Integer>> breakpoints = new ConcurrentHashMap<>();
 
+    /**
+     * Breakpoints in sources that aren't parsed yet, keyed by {@link SourceId#path()}. Guarded by
+     * {@link #breakpointLock}.
+     */
+    private final Map<String, List<PendingBreakpoint>> pending = new HashMap<>();
+
     private final Object breakpointLock = new Object();
 
     private int nextBreakpointId = 1;
@@ -73,6 +79,17 @@ public class DebugController implements ExecutionHooks {
     private volatile DebugEventListener eventListener;
 
     /**
+     * Stop when an error is about to end the program.
+     */
+    private volatile boolean stopOnUncaught;
+
+    /**
+     * The latest error raised outside an evaluation while {@link #stopOnUncaught} was set, only touched on the
+     * interpreter thread.
+     */
+    private RaisedError lastError;
+
+    /**
      * The main file while waiting to stop on its first statement, cleared once it is reached.
      */
     private volatile SourceId entrySource;
@@ -92,30 +109,58 @@ public class DebugController implements ExecutionHooks {
         synchronized (breakpointLock) {
             var breakableLines = sources.get(sourcePath);
             var results = new ArrayList<BreakpointResult>(lines.size());
-            var lineIds = new HashMap<Integer, Integer>();
+            var waiting = new ArrayList<PendingBreakpoint>();
 
             for (int line : lines) {
                 var id = nextBreakpointId++;
 
                 if (breakableLines == null) {
                     results.add(new BreakpointResult(id, BreakpointResult.Status.PENDING, line, null));
-                    lineIds.putIfAbsent(line, id);
-                } else if (breakableLines.contains(line)) {
-                    results.add(new BreakpointResult(id, BreakpointResult.Status.VERIFIED, line, null));
-                    lineIds.putIfAbsent(line, id);
+                    waiting.add(new PendingBreakpoint(id, line));
                 } else {
-                    results.add(new BreakpointResult(id, BreakpointResult.Status.INVALID, line, "No statement on line %d".formatted(line)));
+                    results.add(check(id, line, breakableLines));
                 }
             }
 
-            if (lineIds.isEmpty()) {
-                breakpoints.remove(sourcePath);
+            if (waiting.isEmpty()) {
+                pending.remove(sourcePath);
             } else {
-                breakpoints.put(sourcePath, Map.copyOf(lineIds));
+                pending.put(sourcePath, waiting);
             }
 
+            replaceBreakpoints(sourcePath, results);
             return results;
         }
+    }
+
+    private static BreakpointResult check(int id, int line, Set<Integer> breakableLines) {
+        if (breakableLines.contains(line)) {
+            return new BreakpointResult(id, BreakpointResult.Status.VERIFIED, line, null);
+        }
+
+        return new BreakpointResult(id, BreakpointResult.Status.INVALID, line, "No statement on line %d".formatted(line));
+    }
+
+    /**
+     * Makes the verified and pending breakpoints of {@code results} the only ones in the source.
+     */
+    private void replaceBreakpoints(String sourcePath, List<BreakpointResult> results) {
+        var lineIds = new HashMap<Integer, Integer>();
+        for (var result : results) {
+            if (result.status() != BreakpointResult.Status.INVALID) {
+                lineIds.putIfAbsent(result.line(), result.id());
+            }
+        }
+
+        if (lineIds.isEmpty()) {
+            breakpoints.remove(sourcePath);
+        } else {
+            breakpoints.put(sourcePath, Map.copyOf(lineIds));
+        }
+    }
+
+    public void setStopOnUncaught(boolean stopOnUncaught) {
+        this.stopOnUncaught = stopOnUncaught;
     }
 
     public void setEventListener(DebugEventListener eventListener) {
@@ -186,8 +231,22 @@ public class DebugController implements ExecutionHooks {
             return;
         }
 
+        List<BreakpointResult> changed;
         synchronized (breakpointLock) {
             sources.put(source.path(), breakableLines);
+
+            var waiting = pending.remove(source.path());
+            if (waiting == null) {
+                return;
+            }
+
+            changed = waiting.stream().map(breakpoint -> check(breakpoint.id(), breakpoint.line(), breakableLines)).toList();
+            replaceBreakpoints(source.path(), changed);
+        }
+
+        var listener = eventListener;
+        if (listener != null) {
+            changed.forEach(result -> listener.breakpointChanged(source.path(), result));
         }
     }
 
@@ -238,13 +297,13 @@ public class DebugController implements ExecutionHooks {
         var lineIds = source.path() == null ? null : breakpoints.get(source.path());
         var id = lineIds == null ? null : lineIds.get(line);
         if (id != null) {
-            suspend("breakpoint", List.of(id));
+            suspend(frames.snapshot(), "breakpoint", List.of(id), null, null);
         } else if (pauseRequested) {
-            suspend("pause", List.of());
+            suspend(frames.snapshot(), "pause", List.of(), null, null);
         } else if (stepReached()) {
-            suspend("step", List.of());
+            suspend(frames.snapshot(), "step", List.of(), null, null);
         } else if (entry) {
-            suspend("entry", List.of());
+            suspend(frames.snapshot(), "entry", List.of(), null, null);
         }
     }
 
@@ -289,6 +348,64 @@ public class DebugController implements ExecutionHooks {
         frames.pop();
     }
 
+    @Override
+    public boolean breakpointCalled() {
+        if (aborted) {
+            throw new DebugAbortedException();
+        }
+
+        if (suppressed == 0) {
+            // The innermost frame is breakpoint() itself, which has no source, so show its caller on top
+            var stack = frames.snapshot();
+            if (!stack.isEmpty() && stack.getFirst().kind() == Frame.Kind.NATIVE) {
+                stack = stack.subList(1, stack.size());
+            }
+
+            suspend(stack, "breakpoint", List.of(), "breakpoint()", null);
+        }
+
+        return true;
+    }
+
+    @Override
+    public void errorRaised(RuntimeException error) {
+        if (!stopOnUncaught || suppressed > 0) {
+            return;
+        }
+
+        // Keep the frames from where it was first raised, which is the innermost node
+        var raised = lastError;
+        if (raised != null && causedBy(error, raised.error())) {
+            return;
+        }
+
+        lastError = new RaisedError(error, frames.snapshot());
+    }
+
+    /**
+     * Stops with reason {@code exception} if {@code error} is about to end the program and that filter is on, showing
+     * the frames from where it was raised. Call on the interpreter thread from the top-level error handler.
+     */
+    public void programFailed(Throwable error) {
+        var raised = lastError;
+        if (!stopOnUncaught || raised == null || !causedBy(error, raised.error())) {
+            return;
+        }
+
+        lastError = null;
+        suspend(raised.frames(), "exception", List.of(), null, ErrorMessages.of(raised.error()));
+    }
+
+    private static boolean causedBy(Throwable error, Throwable cause) {
+        for (var current = error; current != null; current = current.getCause()) {
+            if (current == cause) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Runs an evaluation on the interpreter thread while it is stopped. Nothing it runs stops the program or changes
      * the stopped frames.
@@ -304,9 +421,11 @@ public class DebugController implements ExecutionHooks {
 
     /**
      * Stops the interpreter thread, serving submitted work until resumed.
+     *
+     * @param stack The frames to show, innermost first
      */
-    private void suspend(String reason, List<Integer> hitBreakpointIds) {
-        var view = new StoppedView(this, frames.snapshot(), new HandleRegistry(nextHandleId));
+    private void suspend(List<Frame> stack, String reason, List<Integer> hitBreakpointIds, String description, String text) {
+        var view = new StoppedView(this, stack, new HandleRegistry(nextHandleId));
         var current = new Suspension(view, new LinkedBlockingQueue<>());
 
         stepMode = StepMode.NONE;
@@ -325,14 +444,15 @@ public class DebugController implements ExecutionHooks {
 
             var listener = eventListener;
             if (listener != null) {
-                listener.stopped(reason, hitBreakpointIds);
+                listener.stopped(reason, hitBreakpointIds, description, text);
             }
 
             while (true) {
                 var item = current.queue().take();
                 if (item instanceof Resume(StepMode mode)) {
                     stepMode = mode;
-                    stepDepth = frames.depth();
+                    // Measured from the frames shown, which can leave out the native frame of breakpoint()
+                    stepDepth = stack.size();
                     break;
                 }
 
@@ -367,6 +487,13 @@ public class DebugController implements ExecutionHooks {
             }
         }
     }
+
+    private record PendingBreakpoint(int id, int line) {}
+
+    /**
+     * An error and the frames from where it was raised.
+     */
+    private record RaisedError(Throwable error, List<Frame> frames) {}
 
     /**
      * Something for the stopped interpreter thread to take from its queue.

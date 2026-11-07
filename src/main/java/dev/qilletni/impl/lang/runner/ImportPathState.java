@@ -37,6 +37,6 @@ public record ImportPathState(Path path, String libraryName) {
             usePath = parentPath.resolve(childFile);
         }
 
-        return new ImportPathState(usePath, libraryName);
+        return new ImportPathState(usePath.normalize(), libraryName);
     }
 }

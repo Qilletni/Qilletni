@@ -26,6 +26,10 @@ public class BreakpointFunctions {
 
     public long breakpoint() {
         var start = System.currentTimeMillis();
+
+        if (debugSupport.debuggerBreakpoint()) {
+            return System.currentTimeMillis() - start;
+        }
         
         if (debugSupport.isInBreakpoint()) {
             LOGGER.error("Cannot enter breakpoint while already in breakpoint!");

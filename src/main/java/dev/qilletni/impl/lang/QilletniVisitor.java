@@ -1811,7 +1811,8 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                 if (qce.getQilletniStackTrace() == null) {
                     qce.setQilletniStackTrace(qilletniStackTrace);
                 }
-                
+
+                executionHooks.errorRaised(qce);
                 throw e;
             } else {
                 QilletniContextException qce;
@@ -1823,7 +1824,8 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                 }
 
                 qce.setQilletniStackTrace(qilletniStackTrace);
-                
+
+                executionHooks.errorRaised(qce);
                 throw qce;
             }
         }
