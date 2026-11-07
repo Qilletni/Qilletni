@@ -3,6 +3,7 @@ package dev.qilletni.impl.music.orchestration;
 import dev.qilletni.api.lang.types.AlbumType;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.lang.types.OrderableTracksType;
+import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.WeightsType;
 import dev.qilletni.api.lang.types.collection.CollectionLimit;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
@@ -16,6 +17,7 @@ import dev.qilletni.api.music.orchestration.CollectionState;
 import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.api.music.orchestration.TrackOrchestrator;
 import dev.qilletni.api.music.play.PlayActor;
+import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lang.exceptions.UnplayableTypeException;
 import dev.qilletni.impl.lang.types.orderable.OrderableTracksTypeInitializer;
 import org.slf4j.Logger;
@@ -37,16 +39,38 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
     private final PlayActor playActor;
     private final MusicPopulator musicPopulator;
     private final OrderableTracksTypeInitializer orderableTracksTypeInitializer;
+    private final ExecutionHooks executionHooks;
+
+    /**
+     * How many weighted selections are choosing a track for an outer selection's entry.
+     */
+    private int selectionDepth;
+
+    /**
+     * The steps of the weighted selection in progress, outermost first.
+     */
+    private final List<WeightStep> pendingSteps = new ArrayList<>();
 
     public DefaultTrackOrchestrator(PlayActor playActor, MusicCache musicCache, MusicPopulator musicPopulator) {
+        this(playActor, musicCache, musicPopulator, ExecutionHooks.NONE);
+    }
+
+    public DefaultTrackOrchestrator(PlayActor playActor, MusicCache musicCache, MusicPopulator musicPopulator, ExecutionHooks executionHooks) {
         this.playActor = playActor;
         this.musicPopulator = musicPopulator;
         this.orderableTracksTypeInitializer = new OrderableTracksTypeInitializer(musicPopulator, musicCache);
+        this.executionHooks = executionHooks;
     }
 
     @Override
     public void playTrack(Track track) {
+        executionHooks.songPlaying(track, null);
         playActor.playTrack(track);
+    }
+
+    private void playAndWait(Track track, QilletniType from) {
+        executionHooks.songPlaying(track, from);
+        playActor.playTrack(track).join();
     }
 
     /*
@@ -75,7 +99,7 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
         
         LOGGER.debug("Play collection: {}", collectionType.getPlaylist().getTitle());
 
-        conditionallyPlayOrderableTracks(collectionType, loop, track -> playActor.playTrack(track).join(), () -> true);
+        conditionallyPlayOrderableTracks(collectionType, loop, track -> playAndWait(track, collectionType), () -> true);
     }
 
     @Override
@@ -93,7 +117,7 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
         
         LOGGER.debug("Play album: {}", albumType.getAlbum().getName());
         
-        conditionallyPlayOrderableTracks(albumType, loop, track -> playActor.playTrack(track).join(), () -> true);
+        conditionallyPlayOrderableTracks(albumType, loop, track -> playAndWait(track, albumType), () -> true);
     }
 
     @Override
@@ -142,12 +166,12 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
         var weights = orderableTracksType.getWeights();
         var order = orderableTracksType.getOrder();
 
-        var weightedTrackPlayer = WeightedTrackPlayer.byCollectionLimit(weights, collectionLimit, track -> playActor.playTrack(track).join());
+        var weightedTrackPlayer = byCollectionLimit(weights, collectionLimit, track -> playAndWait(track, (QilletniType) orderableTracksType));
         weightedTrackPlayer.conditionallyPlayWeightedTracks(tracks, order, true);
     }
     
     private void playWeightsLimited(WeightsType weights, CollectionLimit collectionLimit) {
-        var weightedTrackPlayer = WeightedTrackPlayer.byCollectionLimit(weights, collectionLimit, track -> playActor.playTrack(track).join());
+        var weightedTrackPlayer = byCollectionLimit(weights, collectionLimit, track -> playAndWait(track, weights));
         weightedTrackPlayer.conditionallyPlayWeights();
     }
     
@@ -157,7 +181,61 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
         weightedTrackPlayer.conditionallyPlayWeightedTracks(tracks, orderableTracksType.getOrder(), loop);
     }
     
-    private static class WeightedTrackPlayer {
+    /**
+     * Creates a {@link WeightedTrackPlayer} either via {@link #byCount( WeightsType, Consumer, int)} or
+     * {@link #byTime( WeightsType, Consumer, long)} depending on the {@link CollectionLimit} provided;
+     * 
+     * @param weights The weights to use when playing tracks
+     * @param collectionLimit The limit to use when playing tracks
+     * @param playCallback The callback to invoke when a track is played
+     * @return The created {@link WeightedTrackPlayer}
+     */
+    private WeightedTrackPlayer byCollectionLimit(WeightsType weights, CollectionLimit collectionLimit, Consumer<Track> playCallback) {
+        if (collectionLimit.limitUnit().isTimeBased()) {
+            return byTime(weights, playCallback, collectionLimit.calculateLimitMilliseconds());
+        } else {
+            return byCount(weights, playCallback, collectionLimit.limitCount());
+        }
+    }
+
+    /**
+     * Returns a {@link WeightedTrackPlayer} that will supply {@code count} tracks based on the provided weights to
+     * the {@code playCallback}.
+     * 
+     * @param weights The weights to use when playing tracks
+     * @param playCallback The callback to invoke when a track is played
+     * @param count The number of tracks to play
+     * @return The created {@link WeightedTrackPlayer}
+     */
+    private WeightedTrackPlayer byCount(WeightsType weights, Consumer<Track> playCallback, int count) {
+        var totalTracksPlayed = new AtomicInteger();
+
+        return new WeightedTrackPlayer(weights, track -> {
+            totalTracksPlayed.incrementAndGet();
+            playCallback.accept(track);
+        }, () -> totalTracksPlayed.get() < count);
+    }
+
+    /**
+     * Returns a {@link WeightedTrackPlayer} that will supply tracks based on the provided weights to
+     * the {@code playCallback} until the provided limit is reached. This is greedy, so it will aim to play at
+     * minimum the provided limit, and may play a song through the limit.
+     * 
+     * @param weights The weights to use when playing tracks
+     * @param playCallback The callback to invoke when a track is played
+     * @param limitMilliseconds The milliseconds to play tracks for
+     * @return The created {@link WeightedTrackPlayer}
+     */
+    private WeightedTrackPlayer byTime(WeightsType weights, Consumer<Track> playCallback, long limitMilliseconds) {
+        var totalTimePassed = new AtomicInteger();
+
+        return new WeightedTrackPlayer(weights, track -> {
+            totalTimePassed.addAndGet(track.getDuration());
+            playCallback.accept(track);
+        }, () -> totalTimePassed.get() < limitMilliseconds);
+    }
+
+    private class WeightedTrackPlayer {
         private final Supplier<Boolean> shouldPlayTrack;
         private final WeightsType weights;
         private final Consumer<Track> playCallback;
@@ -179,60 +257,6 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
         private void initializeWeights() {
             WeightUtils.validateWeights(weights);
             this.weightDispersion = WeightDispersion.initializeWeightDispersion(weights);
-        }
-
-        /**
-         * Creates a {@link WeightedTrackPlayer} either via {@link #byCount( WeightsType, Consumer, int)} or
-         * {@link #byTime( WeightsType, Consumer, long)} depending on the {@link CollectionLimit} provided;
-         * 
-         * @param weights The weights to use when playing tracks
-         * @param collectionLimit The limit to use when playing tracks
-         * @param playCallback The callback to invoke when a track is played
-         * @return The created {@link WeightedTrackPlayer}
-         */
-        public static WeightedTrackPlayer byCollectionLimit(WeightsType weights, CollectionLimit collectionLimit, Consumer<Track> playCallback) {
-            if (collectionLimit.limitUnit().isTimeBased()) {
-                return WeightedTrackPlayer.byTime(weights, playCallback, collectionLimit.calculateLimitMilliseconds());
-            } else {
-                return WeightedTrackPlayer.byCount(weights, playCallback, collectionLimit.limitCount());
-            }
-        }
-
-        /**
-         * Returns a {@link WeightedTrackPlayer} that will supply {@code count} tracks based on the provided weights to
-         * the {@code playCallback}.
-         * 
-         * @param weights The weights to use when playing tracks
-         * @param playCallback The callback to invoke when a track is played
-         * @param count The number of tracks to play
-         * @return The created {@link WeightedTrackPlayer}
-         */
-        public static WeightedTrackPlayer byCount(WeightsType weights, Consumer<Track> playCallback, int count) {
-            var totalTracksPlayed = new AtomicInteger();
-
-            return new WeightedTrackPlayer(weights, track -> {
-                totalTracksPlayed.incrementAndGet();
-                playCallback.accept(track);
-            }, () -> totalTracksPlayed.get() < count);
-        }
-
-        /**
-         * Returns a {@link WeightedTrackPlayer} that will supply tracks based on the provided weights to
-         * the {@code playCallback} until the provided limit is reached. This is greedy, so it will aim to play at
-         * minimum the provided limit, and may play a song through the limit.
-         * 
-         * @param weights The weights to use when playing tracks
-         * @param playCallback The callback to invoke when a track is played
-         * @param limitMilliseconds The milliseconds to play tracks for
-         * @return The created {@link WeightedTrackPlayer}
-         */
-        public static WeightedTrackPlayer byTime(WeightsType weights, Consumer<Track> playCallback, long limitMilliseconds) {
-            var totalTimePassed = new AtomicInteger();
-
-            return new WeightedTrackPlayer(weights, track -> {
-                totalTimePassed.addAndGet(track.getDuration());
-                playCallback.accept(track);
-            }, () -> totalTimePassed.get() < limitMilliseconds);
         }
 
         /**
@@ -331,11 +355,33 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
 
             if (weightedTrackContextOptional.isPresent()) {
                 var weightEntry = weightedTrackContextOptional.get();
-                var weightedTrack = weightEntry.getTrack();
+
+                if (selectionDepth == 0) {
+                    pendingSteps.clear();
+                }
+
+                // Nested selections made while getting this entry's track add their steps after this one
+                var stepIndex = pendingSteps.size();
+                pendingSteps.add(new WeightStep(weights, weightEntry, weights.getWeightEntries().indexOf(weightEntry)));
+
+                Track weightedTrack;
+                selectionDepth++;
+                try {
+                    weightedTrack = weightEntry.getTrack();
+                } finally {
+                    selectionDepth--;
+                }
 
                 // If the track or weight can't be repeated (and it was played last), don't play it
                 if (weightedTrack.equals(dontPlayNextTrack) || weightEntry.equals(dontPlayNextWeight)) {
+                    pendingSteps.subList(stepIndex, pendingSteps.size()).clear();
                     return SelectionResult.RETRY;
+                }
+
+                if (selectionDepth == 0) {
+                    var path = List.copyOf(pendingSteps);
+                    pendingSteps.clear();
+                    executionHooks.weightSelected(path, weightedTrack);
                 }
 
                 playCallback.accept(weightedTrack);

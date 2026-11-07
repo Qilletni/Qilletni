@@ -2,8 +2,12 @@ package dev.qilletni.impl.debug;
 
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.types.FunctionType;
+import dev.qilletni.api.lang.types.QilletniType;
+import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.lang.QilletniVisitor;
+import dev.qilletni.impl.music.orchestration.WeightStep;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -53,4 +57,18 @@ public interface ExecutionHooks {
     default boolean breakpointCalled() {
         return false;
     }
+
+    /**
+     * A track is about to be sent to the play actor.
+     *
+     * @param from The collection, album or weights being played, or {@code null} for a single song
+     */
+    default void songPlaying(Track track, QilletniType from) {}
+
+    /**
+     * An outermost weighted selection chose a track, which is about to be played or returned.
+     *
+     * @param path The entry chosen at each level, outermost first
+     */
+    default void weightSelected(List<WeightStep> path, Track track) {}
 }

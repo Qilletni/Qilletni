@@ -284,13 +284,25 @@ final class MusicValues {
         var members = new ArrayList<Member>(entries.size());
 
         for (int i = 0; i < entries.size(); i++) {
-            var entry = entries.get(i);
-            var source = entry instanceof WeightEntryImpl impl ? impl.getSourceValue() : null;
-            var name = "[%d] %s%s".formatted(i, weightPrefix(entry), weightAmount(entry));
-            members.add(new Member(name, source == null ? new StringTypeImpl("function call") : source, null));
+            members.add(new Member(entryName(i, entries.get(i)), entrySource(entries.get(i)), null));
         }
 
         return members;
+    }
+
+    /**
+     * @return The entry named like its source, e.g. {@code [0] |!50%}
+     */
+    static String entryName(int index, WeightEntry entry) {
+        return "[%d] %s%s".formatted(index, weightPrefix(entry), weightAmount(entry));
+    }
+
+    /**
+     * @return The value the entry picks tracks from
+     */
+    static QilletniType entrySource(WeightEntry entry) {
+        var source = entry instanceof WeightEntryImpl impl ? impl.getSourceValue() : null;
+        return source == null ? new StringTypeImpl("function call") : source;
     }
 
     private static String weightPrefix(WeightEntry entry) {

@@ -2,12 +2,17 @@ package dev.qilletni.impl.debug;
 
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.types.FunctionType;
+import dev.qilletni.api.lang.types.QilletniType;
+import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.lang.QilletniVisitor;
+import dev.qilletni.impl.lang.types.SongTypeImpl;
+import dev.qilletni.impl.music.orchestration.WeightStep;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -82,6 +87,21 @@ public class DebugController implements ExecutionHooks {
      * Stop when an error is about to end the program.
      */
     private volatile boolean stopOnUncaught;
+
+    /**
+     * Stop when a track is about to be played.
+     */
+    private volatile boolean stopOnSongPlayed;
+
+    /**
+     * Stop when an outermost weighted selection chooses a track.
+     */
+    private volatile boolean stopOnWeightSelected;
+
+    /**
+     * The thread running the program, set when the first file is entered. Music played elsewhere never stops.
+     */
+    private volatile Thread interpreterThread;
 
     /**
      * The latest error raised outside an evaluation while {@link #stopOnUncaught} was set, only touched on the
@@ -161,6 +181,14 @@ public class DebugController implements ExecutionHooks {
 
     public void setStopOnUncaught(boolean stopOnUncaught) {
         this.stopOnUncaught = stopOnUncaught;
+    }
+
+    public void setStopOnSongPlayed(boolean stopOnSongPlayed) {
+        this.stopOnSongPlayed = stopOnSongPlayed;
+    }
+
+    public void setStopOnWeightSelected(boolean stopOnWeightSelected) {
+        this.stopOnWeightSelected = stopOnWeightSelected;
     }
 
     public void setEventListener(DebugEventListener eventListener) {
@@ -252,6 +280,10 @@ public class DebugController implements ExecutionHooks {
 
     @Override
     public void fileEntered(SourceId source, QilletniVisitor visitor) {
+        if (interpreterThread == null) {
+            interpreterThread = Thread.currentThread();
+        }
+
         frames.push(new Frame(Frame.Kind.TOP_LEVEL, "<top level>", source, visitor));
     }
 
@@ -396,6 +428,66 @@ public class DebugController implements ExecutionHooks {
         suspend(raised.frames(), "exception", List.of(), null, ErrorMessages.of(raised.error()));
     }
 
+    @Override
+    public void songPlaying(Track track, QilletniType from) {
+        if (!stopOnSongPlayed || !canStopForMusic()) {
+            return;
+        }
+
+        var song = songOf(track);
+        if (song == null) {
+            return;
+        }
+
+        var rows = new ArrayList<MusicStop.Row>();
+        rows.add(new MusicStop.Value("song", song));
+        if (from != null) {
+            rows.add(new MusicStop.Value("from", from));
+        }
+
+        suspend(frames.snapshot(), "song played", List.of(), "Song played: " + ValueFormatter.value(song), null, new MusicStop("song played", rows));
+    }
+
+    @Override
+    public void weightSelected(List<WeightStep> path, Track track) {
+        if (!stopOnWeightSelected || !canStopForMusic() || path.isEmpty()) {
+            return;
+        }
+
+        var song = songOf(track);
+        if (song == null) {
+            return;
+        }
+
+        var steps = new ArrayList<MusicStop.Row>();
+        for (var step : path) {
+            var source = MusicValues.entrySource(step.entry());
+            steps.add(new MusicStop.Group(MusicValues.entryName(step.entryIndex(), step.entry()), ValueFormatter.value(source), List.of(
+                    new MusicStop.Value("weights", step.weights()),
+                    new MusicStop.Value("entry", source))));
+        }
+
+        var pathText = String.join(" → ", steps.stream().map(MusicStop.Row::name).toList());
+        var rows = List.<MusicStop.Row>of(
+                new MusicStop.Value("song", song),
+                new MusicStop.Group("path", pathText, steps));
+
+        suspend(frames.snapshot(), "weight selected", List.of(), "Weight selected: %s → %s".formatted(pathText, ValueFormatter.value(song)), null, new MusicStop("weight selected", rows));
+    }
+
+    private boolean canStopForMusic() {
+        return suppressed == 0 && Thread.currentThread() == interpreterThread && frames.top() != null;
+    }
+
+    /**
+     * @return The track as a loaded song, or {@code null} if no frame can make one
+     */
+    private SongTypeImpl songOf(Track track) {
+        return frames.snapshot().stream().map(Frame::visitor).filter(Objects::nonNull).findFirst()
+                .map(visitor -> new SongTypeImpl(visitor.getDynamicProvider(), track))
+                .orElse(null);
+    }
+
     private static boolean causedBy(Throwable error, Throwable cause) {
         for (var current = error; current != null; current = current.getCause()) {
             if (current == cause) {
@@ -425,7 +517,14 @@ public class DebugController implements ExecutionHooks {
      * @param stack The frames to show, innermost first
      */
     private void suspend(List<Frame> stack, String reason, List<Integer> hitBreakpointIds, String description, String text) {
-        var view = new StoppedView(this, stack, new HandleRegistry(nextHandleId));
+        suspend(stack, reason, hitBreakpointIds, description, text, null);
+    }
+
+    /**
+     * @param music The music event to show as the top frame's Music scope, or {@code null}
+     */
+    private void suspend(List<Frame> stack, String reason, List<Integer> hitBreakpointIds, String description, String text, MusicStop music) {
+        var view = new StoppedView(this, stack, new HandleRegistry(nextHandleId), music);
         var current = new Suspension(view, new LinkedBlockingQueue<>());
 
         stepMode = StepMode.NONE;

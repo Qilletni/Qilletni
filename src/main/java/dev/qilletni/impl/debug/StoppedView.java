@@ -3,6 +3,7 @@ package dev.qilletni.impl.debug;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.impl.lang.QilletniVisitor;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -16,11 +17,16 @@ public final class StoppedView {
     private final DebugController controller;
     private final List<Frame> frames;
     private final HandleRegistry handles;
+    private final MusicStop music;
 
-    StoppedView(DebugController controller, List<Frame> frames, HandleRegistry handles) {
+    /**
+     * @param music The music event stopped for, or {@code null}
+     */
+    StoppedView(DebugController controller, List<Frame> frames, HandleRegistry handles, MusicStop music) {
         this.controller = controller;
         this.frames = frames;
         this.handles = handles;
+        this.music = music;
     }
 
     /**
@@ -39,8 +45,15 @@ public final class StoppedView {
      */
     public List<DebugScope> scopes(int frameId) {
         var frame = handles.get(frameId, Frame.class);
-        return VariableReader.scopes(frame).stream()
-                .map(kind -> new DebugScope(kind, handles.register(new ScopeHandle(frame, kind))))
+        var kinds = new ArrayList<>(VariableReader.scopes(frame));
+        if (music != null && frame == frames.getFirst()) {
+            // Right after Locals, so clients that show the first scope inline still show Locals there
+            kinds.add(Math.min(1, kinds.size()), DebugScope.Kind.MUSIC);
+        }
+
+        return kinds.stream()
+                .map(kind -> new DebugScope(kind, kind == DebugScope.Kind.MUSIC ? "Music: " + music.event() : kind.displayName(),
+                        handles.register(new ScopeHandle(frame, kind))))
                 .toList();
     }
 
@@ -53,6 +66,8 @@ public final class StoppedView {
      */
     public List<DebugVariable> variables(int variablesReference, ChildFilter filter, int start, int count) {
         return switch (handles.get(variablesReference, Object.class)) {
+            case ScopeHandle scope when scope.kind() == DebugScope.Kind.MUSIC -> musicRows(music.rows());
+            case MusicStop.Group group -> musicRows(group.children());
             case ScopeHandle scope -> VariableReader.variables(scope.frame(), scope.kind()).stream()
                     .map(binding -> ValueRows.row(binding.name(), binding.value(), binding.name(), binding.property(), handles))
                     .toList();
@@ -85,6 +100,13 @@ public final class StoppedView {
 
         return result.map(value -> ValueRows.row(text, value, mode == EvalMode.WATCH ? text : null, false, handles))
                 .orElseGet(() -> new DebugVariable(text, "", "", null, 0, 0, false));
+    }
+
+    private List<DebugVariable> musicRows(List<MusicStop.Row> rows) {
+        return rows.stream().map(row -> switch (row) {
+            case MusicStop.Value value -> ValueRows.row(value.name(), value.value(), null, false, handles);
+            case MusicStop.Group group -> new DebugVariable(group.name(), group.value(), "", null, handles.register(group), 0, false);
+        }).toList();
     }
 
     private MusicValues.MusicServices musicServices() {
