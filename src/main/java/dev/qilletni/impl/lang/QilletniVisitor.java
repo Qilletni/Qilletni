@@ -22,6 +22,9 @@ import dev.qilletni.impl.StringUtility;
 import dev.qilletni.impl.antlr.QilletniLexer;
 import dev.qilletni.impl.antlr.QilletniParser;
 import dev.qilletni.impl.antlr.QilletniParserBaseVisitor;
+import dev.qilletni.impl.debug.BreakableLines;
+import dev.qilletni.impl.debug.ExecutionHooks;
+import dev.qilletni.impl.debug.SourceId;
 import dev.qilletni.impl.lang.exceptions.*;
 import dev.qilletni.impl.lang.internal.BackgroundTaskExecutorImpl;
 import dev.qilletni.impl.lang.internal.FunctionInvokerImpl;
@@ -65,8 +68,10 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
     private final BiFunction<String, String, Optional<ImportAliasType>> importConsumer;
     private final FunctionInvokerImpl functionInvoker;
     private final QilletniStackTrace qilletniStackTrace;
+    private final ExecutionHooks executionHooks;
+    private final SourceId sourceId;
 
-    public QilletniVisitor(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, Scope globalScope, DynamicProvider dynamicProvider, EntityDefinitionManager entityDefinitionManager, NativeFunctionHandler nativeFunctionHandler, MusicPopulator musicPopulator, ListTypeTransformer listTypeTransformer, BackgroundTaskExecutorImpl backgroundTaskExecutor, DebugSupportImpl debugSupport, QilletniStackTrace qilletniStackTrace, BiFunction<String, String, Optional<ImportAliasType>> importConsumer) {
+    public QilletniVisitor(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, Scope globalScope, DynamicProvider dynamicProvider, EntityDefinitionManager entityDefinitionManager, NativeFunctionHandler nativeFunctionHandler, MusicPopulator musicPopulator, ListTypeTransformer listTypeTransformer, BackgroundTaskExecutorImpl backgroundTaskExecutor, DebugSupportImpl debugSupport, QilletniStackTrace qilletniStackTrace, ExecutionHooks executionHooks, SourceId sourceId, BiFunction<String, String, Optional<ImportAliasType>> importConsumer) {
         this.symbolTable = symbolTable;
         this.globalScope = globalScope;
         this.dynamicProvider = dynamicProvider;
@@ -77,7 +82,9 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         this.debugSupport = debugSupport;
         this.importConsumer = importConsumer;
         this.qilletniStackTrace = qilletniStackTrace;
-        this.functionInvoker = new FunctionInvokerImpl(symbolTable, symbolTableMap, nativeFunctionHandler, qilletniStackTrace);
+        this.executionHooks = executionHooks;
+        this.sourceId = sourceId;
+        this.functionInvoker = new FunctionInvokerImpl(symbolTable, symbolTableMap, nativeFunctionHandler, qilletniStackTrace, executionHooks);
     }
 
     @Override
@@ -1053,6 +1060,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
     @Override
     public Optional<QilletniType> visitBody(QilletniParser.BodyContext ctx) {
         if (ctx.return_stmt() != null) {
+            statementReached(ctx.return_stmt());
             return Optional.of(visitQilletniTypedNode(ctx.return_stmt()));
         }
 
@@ -1064,8 +1072,17 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         return Optional.empty();
     }
 
+    private void statementReached(ParserRuleContext ctx) {
+        var start = ctx.getStart();
+        executionHooks.statementReached(sourceId, start.getLine(), start.getCharPositionInLine() + 1);
+    }
+
     @Override
     public Optional<QilletniType> visitBody_stmt(QilletniParser.Body_stmtContext ctx) {
+        if (BreakableLines.isBreakable(ctx)) {
+            statementReached(ctx);
+        }
+
         if (ctx.if_stmt() != null) {
             return visitNode(ctx.if_stmt());
         }

@@ -14,6 +14,9 @@ import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.antlr.QilletniLexer;
 import dev.qilletni.impl.antlr.QilletniParser;
+import dev.qilletni.impl.debug.BreakableLines;
+import dev.qilletni.impl.debug.ExecutionHooks;
+import dev.qilletni.impl.debug.SourceId;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.docs.exceptions.DocErrorListener;
 import dev.qilletni.impl.lang.exceptions.QilletniNativeInvocationException;
@@ -76,6 +79,7 @@ public class QilletniProgramRunner {
     private final LibraryRegistrar libraryRegistrar;
     private final BackgroundTaskExecutorImpl backgroundTaskExecutor;
     private final QilletniStackTrace qilletniStackTrace;
+    private ExecutionHooks executionHooks = ExecutionHooks.NONE;
 
     // Import cache to avoid importing the same file multiple times
     private final Set<ImportPathState> importCache = new HashSet<>();
@@ -205,6 +209,14 @@ public class QilletniProgramRunner {
         return typeAdapterRegistrar;
     }
 
+    /**
+     * Sets the hooks notified as the program runs. Must be called before any Qilletni code runs.
+     */
+    public void setExecutionHooks(ExecutionHooks executionHooks) {
+        this.executionHooks = executionHooks;
+        nativeFunctionHandler.setExecutionHooks(executionHooks);
+    }
+
     public void importInitialFiles() {
         LOGGER.debug("Importing {} initial files!", libraryRegistrar.getAutoImportFiles().size());
 
@@ -227,17 +239,17 @@ public class QilletniProgramRunner {
     }
 
     private SymbolTable runProgram(Path file, ImportPathState pathState, Scope global) throws IOException {
-        return runProgram(CharStreams.fromString(Files.readString(file), file.getFileName().toString()), pathState, global);
+        return runProgram(CharStreams.fromString(Files.readString(file), file.getFileName().toString()), pathState, global, SourceId.ofFile(file));
     }
 
     private SymbolTable runProgram(InputStream stream, ImportPathState pathState, Scope globalScope) throws IOException {
         var data = new String(new BufferedInputStream(stream).readAllBytes());
-        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope);
+        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope, importedSourceId(pathState));
     }
 
     private SymbolTable runProgram(String data, ImportPathState pathState, Scope globalScope) throws IOException {
 //        var data = new String(new BufferedInputStream(stream).readAllBytes());
-        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope);
+        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope, importedSourceId(pathState));
     }
 
     public SymbolTable runProgram(CharStream charStream, ImportPathState pathState) {
@@ -245,6 +257,18 @@ public class QilletniProgramRunner {
     }
 
     public SymbolTable runProgram(CharStream charStream, ImportPathState pathState, Scope globalScope) {
+        return runProgram(charStream, pathState, globalScope, SourceId.ofName(charStream.getSourceName()));
+    }
+
+    private static SourceId importedSourceId(ImportPathState pathState) {
+        if (pathState.libraryName() == null) {
+            return SourceId.ofName(pathState.path().getFileName().toString());
+        }
+
+        return SourceId.ofLibrary(pathState.libraryName(), pathState.path().toString());
+    }
+
+    private SymbolTable runProgram(CharStream charStream, ImportPathState pathState, Scope globalScope, SourceId sourceId) {
         var lexer = new QilletniLexer(charStream);
         var tokenStream = new CommonTokenStream(lexer);
         var qilletniParser = new QilletniParser(tokenStream);
@@ -260,7 +284,9 @@ public class QilletniProgramRunner {
         LOGGER.debug("global override: {}", globalScope);
 
         QilletniParser.ProgContext programContext = qilletniParser.prog();
-        var qilletniVisitor = new QilletniVisitor(symbolTable, symbolTables, globalOverride, dynamicProvider, entityDefinitionManager, nativeFunctionHandler, musicPopulator, listTypeTransformer, backgroundTaskExecutor, debugSupport, qilletniStackTrace,
+        executionHooks.sourceParsed(sourceId, BreakableLines.collect(programContext));
+
+        var qilletniVisitor = new QilletniVisitor(symbolTable, symbolTables, globalOverride, dynamicProvider, entityDefinitionManager, nativeFunctionHandler, musicPopulator, listTypeTransformer, backgroundTaskExecutor, debugSupport, qilletniStackTrace, executionHooks, sourceId,
                 (importedFile, importAs) -> importFileFromStream(pathState.importFrom(importedFile), importAs, globalOverride));
         
         symbolTables.put(symbolTable, qilletniVisitor);

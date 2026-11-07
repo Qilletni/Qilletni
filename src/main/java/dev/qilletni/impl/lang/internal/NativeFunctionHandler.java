@@ -7,6 +7,7 @@ import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.lib.annotations.BeforeAnyInvocation;
 import dev.qilletni.api.lib.annotations.NativeOn;
+import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.exceptions.NativeMethodNotBoundException;
 import dev.qilletni.impl.lang.exceptions.QilletniContextException;
@@ -43,6 +44,7 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
     private final List<ScopedInjectableInstance> injectableInstances;
     private final Map<SymbolTable, QilletniVisitor> symbolTables;
     private final DebugSupportImpl debugSupport;
+    private ExecutionHooks executionHooks = ExecutionHooks.NONE;
 
     private final static Constructor<?> functionInvokerConstructor = FunctionInvokerImpl.class.getConstructors()[0];
     
@@ -56,7 +58,11 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
         this.symbolTables = symbolTables;
         this.debugSupport = debugSupport;
     }
-    
+
+    public void setExecutionHooks(ExecutionHooks executionHooks) {
+        this.executionHooks = executionHooks;
+    }
+
     @Override
     public void addInjectableInstance(Object object) {
         injectableInstances.add(new ScopedInjectableInstance(object));
@@ -212,7 +218,7 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
                                             try {
                                                 LOGGER.debug("New instance of stuff {}", functionInvokerConstructor.getDeclaringClass().getCanonicalName());
 //                                                return functionInvokerConstructor.newInstance(symbolTable, symbolTables, this, qilletniStackTrace.cloneStackTrace());
-                                                return functionInvokerConstructor.newInstance(symbolTable, symbolTables, this, qilletniStackTrace);
+                                                return functionInvokerConstructor.newInstance(symbolTable, symbolTables, this, qilletniStackTrace, executionHooks);
                                             } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
                                                 throw new RuntimeException(e);
                                             }
