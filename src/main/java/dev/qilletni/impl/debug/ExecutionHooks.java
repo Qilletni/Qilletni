@@ -1,5 +1,9 @@
 package dev.qilletni.impl.debug;
 
+import dev.qilletni.api.lang.table.Scope;
+import dev.qilletni.api.lang.types.FunctionType;
+import dev.qilletni.impl.lang.QilletniVisitor;
+
 import java.util.Set;
 
 /**
@@ -11,9 +15,28 @@ public interface ExecutionHooks {
 
     default void sourceParsed(SourceId source, Set<Integer> breakableLines) {}
 
-    default void statementReached(SourceId source, int line, int column) {}
+    /**
+     * A file's top level starts running: the main file, an auto-import or an {@code import}.
+     */
+    default void fileEntered(SourceId source, QilletniVisitor visitor) {}
 
-    default void functionEntered(String name) {}
+    default void fileExited() {}
+
+    /**
+     * An {@code import} is about to run the imported file.
+     */
+    default void importReached(SourceId source, int line, int column, Scope scope) {}
+
+    /**
+     * @param scope The scope the statement runs in
+     */
+    default void statementReached(SourceId source, int line, int column, Scope scope) {}
+
+    /**
+     * @param callerScope The caller's scope, as it was when it made the call
+     * @param visitor     The visitor the function runs in
+     */
+    default void functionEntered(FunctionType function, Scope callerScope, QilletniVisitor visitor) {}
 
     default void functionExited() {}
 }

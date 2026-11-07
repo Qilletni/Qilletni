@@ -1,8 +1,10 @@
 package dev.qilletni.impl.debug;
 
-import java.util.ArrayDeque;
+import dev.qilletni.api.lang.table.Scope;
+import dev.qilletni.api.lang.types.FunctionType;
+import dev.qilletni.impl.lang.QilletniVisitor;
+
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +13,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -53,10 +56,9 @@ public class DebugController implements ExecutionHooks {
      */
     private volatile SourceId entrySource;
 
-    /**
-     * The top level, then one entry per function call, innermost first. Only touched on the interpreter thread.
-     */
-    private final Deque<CallFrame> callFrames = new ArrayDeque<>(List.of(new CallFrame(null)));
+    private final FrameTracker frames = new FrameTracker();
+
+    private final AtomicInteger nextHandleId = new AtomicInteger(1);
 
     /**
      * Replaces every breakpoint in a source.
@@ -103,7 +105,7 @@ public class DebugController implements ExecutionHooks {
      * Runs {@code work} on the interpreter thread while the program is stopped. Fails right away if it isn't, and
      * fails if the program resumes before the work runs.
      */
-    public <T> CompletableFuture<T> submit(Function<StopLocation, T> work) {
+    public <T> CompletableFuture<T> submit(Function<StoppedView, T> work) {
         var future = new CompletableFuture<T>();
 
         synchronized (suspensionLock) {
@@ -112,8 +114,8 @@ public class DebugController implements ExecutionHooks {
                 return future;
             }
 
-            var location = suspension.location();
-            suspension.queue().add(new WorkItem(() -> future.complete(work.apply(location)), future::completeExceptionally));
+            var view = suspension.view();
+            suspension.queue().add(new WorkItem(() -> future.complete(work.apply(view)), future::completeExceptionally));
         }
 
         return future;
@@ -156,19 +158,35 @@ public class DebugController implements ExecutionHooks {
     }
 
     @Override
-    public void statementReached(SourceId source, int line, int column) {
+    public void fileEntered(SourceId source, QilletniVisitor visitor) {
+        frames.push(new Frame(Frame.Kind.TOP_LEVEL, "<top level>", source, visitor));
+    }
+
+    @Override
+    public void fileExited() {
+        frames.pop();
+    }
+
+    @Override
+    public void importReached(SourceId source, int line, int column, Scope scope) {
+        frames.top().moveTo(source, line, column, scope);
+    }
+
+    @Override
+    public void statementReached(SourceId source, int line, int column, Scope scope) {
         if (aborted) {
             throw new DebugAbortedException();
         }
 
-        var frame = callFrames.peek();
+        // Lines typed into the breakpoint() REPL aren't parsed by the runner, so they have no source
+        if (source == null) {
+            return;
+        }
+
+        var frame = frames.top();
 
         // A later statement on the line this frame just ran doesn't stop again; running the line again (a loop) does
-        var sameLine = line == frame.lastLine && column > frame.lastColumn && source.equals(frame.lastSource);
-
-        frame.lastSource = source;
-        frame.lastLine = line;
-        frame.lastColumn = column;
+        var sameLine = frame.statementReached(source, line, column, scope);
 
         var entry = entrySource != null && entrySource.equals(source);
         if (entry) {
@@ -181,12 +199,10 @@ public class DebugController implements ExecutionHooks {
 
         var lineIds = source.path() == null ? null : breakpoints.get(source.path());
         var id = lineIds == null ? null : lineIds.get(line);
-        var location = new StopLocation(source, line, column, frame.functionName);
-
         if (id != null) {
-            suspend(location, "breakpoint", List.of(id));
+            suspend("breakpoint", List.of(id));
         } else if (entry) {
-            suspend(location, "entry", List.of());
+            suspend("entry", List.of());
         }
     }
 
@@ -198,20 +214,28 @@ public class DebugController implements ExecutionHooks {
     }
 
     @Override
-    public void functionEntered(String name) {
-        callFrames.push(new CallFrame(name));
+    public void functionEntered(FunctionType function, Scope callerScope, QilletniVisitor visitor) {
+        var caller = frames.top();
+        if (caller != null) {
+            caller.callMade(callerScope);
+        }
+
+        var onType = function.getOnType();
+        var name = onType == null ? function.getName() : "%s.%s".formatted(onType.getTypeName(), function.getName());
+        frames.push(new Frame(function.isNative() ? Frame.Kind.NATIVE : Frame.Kind.FUNCTION, name, null, visitor));
     }
 
     @Override
     public void functionExited() {
-        callFrames.pop();
+        frames.pop();
     }
 
     /**
      * Stops the interpreter thread, serving submitted work until resumed.
      */
-    private void suspend(StopLocation location, String reason, List<Integer> hitBreakpointIds) {
-        var current = new Suspension(location, new LinkedBlockingQueue<>());
+    private void suspend(String reason, List<Integer> hitBreakpointIds) {
+        var view = new StoppedView(frames.snapshot(), new HandleRegistry(nextHandleId));
+        var current = new Suspension(view, new LinkedBlockingQueue<>());
 
         // Accept work before the IDE hears about the stop, so its first request can't be refused
         synchronized (suspensionLock) {
@@ -262,21 +286,6 @@ public class DebugController implements ExecutionHooks {
     }
 
     /**
-     * The top level or one function call, with the last statement it reached.
-     */
-    private static final class CallFrame {
-
-        private final String functionName;
-        private SourceId lastSource;
-        private int lastLine;
-        private int lastColumn;
-
-        private CallFrame(String functionName) {
-            this.functionName = functionName;
-        }
-    }
-
-    /**
      * A unit of work for the stopped interpreter thread, or one of the {@link #RESUME} and {@link #ABORT} sentinels.
      *
      * @param run  Runs the work and completes its future, on the interpreter thread
@@ -288,8 +297,8 @@ public class DebugController implements ExecutionHooks {
      * One stop of the program. A new one is created for every stop, so work queued for an earlier stop can never
      * run in a later one.
      *
-     * @param location Where the program is stopped
-     * @param queue    Work for the interpreter thread to run until it takes {@link #RESUME} or {@link #ABORT}
+     * @param view  The program as seen from this stop, including its frame ids and variable references
+     * @param queue Work for the interpreter thread to run until it takes {@link #RESUME} or {@link #ABORT}
      */
-    private record Suspension(StopLocation location, BlockingQueue<WorkItem> queue) {}
+    private record Suspension(StoppedView view, BlockingQueue<WorkItem> queue) {}
 }

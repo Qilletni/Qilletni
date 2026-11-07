@@ -81,6 +81,9 @@ public class QilletniProgramRunner {
     private final QilletniStackTrace qilletniStackTrace;
     private ExecutionHooks executionHooks = ExecutionHooks.NONE;
 
+    // A function's body runs in its caller's visitor, so a statement's source comes from its own char stream
+    private final Map<CharStream, SourceId> sourceIds = new IdentityHashMap<>();
+
     // Import cache to avoid importing the same file multiple times
     private final Set<ImportPathState> importCache = new HashSet<>();
 
@@ -297,6 +300,7 @@ public class QilletniProgramRunner {
         qilletniParser.addErrorListener(new DocErrorListener());
 
         var programContext = qilletniParser.prog();
+        sourceIds.put(charStream, sourceId);
         executionHooks.sourceParsed(sourceId, BreakableLines.collect(programContext));
 
         return programContext;
@@ -309,12 +313,17 @@ public class QilletniProgramRunner {
 
         LOGGER.debug("global override: {}", globalScope);
 
-        var qilletniVisitor = new QilletniVisitor(symbolTable, symbolTables, globalOverride, dynamicProvider, entityDefinitionManager, nativeFunctionHandler, musicPopulator, listTypeTransformer, backgroundTaskExecutor, debugSupport, qilletniStackTrace, executionHooks, sourceId,
+        var qilletniVisitor = new QilletniVisitor(symbolTable, symbolTables, globalOverride, dynamicProvider, entityDefinitionManager, nativeFunctionHandler, musicPopulator, listTypeTransformer, backgroundTaskExecutor, debugSupport, qilletniStackTrace, executionHooks, sourceIds,
                 (importedFile, importAs) -> importFileFromStream(pathState.importFrom(importedFile), importAs, globalOverride));
         
         symbolTables.put(symbolTable, qilletniVisitor);
 
-        qilletniVisitor.visit(programContext);
+        executionHooks.fileEntered(sourceId, qilletniVisitor);
+        try {
+            qilletniVisitor.visit(programContext);
+        } finally {
+            executionHooks.fileExited();
+        }
 
         return symbolTable;
     }

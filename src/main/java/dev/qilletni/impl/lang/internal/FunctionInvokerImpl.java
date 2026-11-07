@@ -84,6 +84,7 @@ public class FunctionInvokerImpl implements FunctionInvoker {
     private <T extends QilletniType> Optional<T> invokeFunction(String functionName, List<QilletniType> params, QilletniType invokedOn, FunctionType alreadyFoundFunction, Runnable pushStackTrace) {
         LOGGER.debug("invokedOn = {}", invokedOn == null ? "-" : invokedOn.getTypeClass());
         var hasOnType = invokedOn != null;
+        var callerScope = symbolTable.currentScope();
 
         var swappedLookupScope = false;
         
@@ -171,7 +172,7 @@ public class FunctionInvokerImpl implements FunctionInvoker {
             LOGGER.debug("Invoking native! {}", functionType.getName());
             LOGGER.debug("symtab = {}", symbolTable.currentScope());
             pushStackTrace.run();
-            executionHooks.functionEntered(functionType.getName());
+            executionHooks.functionEntered(functionType, callerScope, symbolTableMap.get(symbolTable));
 
             Optional<T> res;
             try {
@@ -198,7 +199,7 @@ public class FunctionInvokerImpl implements FunctionInvoker {
         LOGGER.debug("pushStackTrace = {}", pushStackTrace);
         pushStackTrace.run();
         LOGGER.debug("pushed stack trace AFTER");
-        executionHooks.functionEntered(functionType.getName());
+        executionHooks.functionEntered(functionType, callerScope, symbolTableMap.get(symbolTable));
 
         Optional<T> result;
         try {

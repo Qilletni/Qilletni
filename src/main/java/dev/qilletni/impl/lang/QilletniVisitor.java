@@ -40,6 +40,7 @@ import dev.qilletni.impl.lang.types.entity.FunctionPopulator;
 import dev.qilletni.impl.lang.types.entity.UninitializedTypeImpl;
 import dev.qilletni.impl.lang.types.list.ListTypeTransformer;
 import dev.qilletni.impl.lang.types.weights.WeightEntryImpl;
+import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.slf4j.Logger;
@@ -69,9 +70,9 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
     private final FunctionInvokerImpl functionInvoker;
     private final QilletniStackTrace qilletniStackTrace;
     private final ExecutionHooks executionHooks;
-    private final SourceId sourceId;
+    private final Map<CharStream, SourceId> sourceIds;
 
-    public QilletniVisitor(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, Scope globalScope, DynamicProvider dynamicProvider, EntityDefinitionManager entityDefinitionManager, NativeFunctionHandler nativeFunctionHandler, MusicPopulator musicPopulator, ListTypeTransformer listTypeTransformer, BackgroundTaskExecutorImpl backgroundTaskExecutor, DebugSupportImpl debugSupport, QilletniStackTrace qilletniStackTrace, ExecutionHooks executionHooks, SourceId sourceId, BiFunction<String, String, Optional<ImportAliasType>> importConsumer) {
+    public QilletniVisitor(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, Scope globalScope, DynamicProvider dynamicProvider, EntityDefinitionManager entityDefinitionManager, NativeFunctionHandler nativeFunctionHandler, MusicPopulator musicPopulator, ListTypeTransformer listTypeTransformer, BackgroundTaskExecutorImpl backgroundTaskExecutor, DebugSupportImpl debugSupport, QilletniStackTrace qilletniStackTrace, ExecutionHooks executionHooks, Map<CharStream, SourceId> sourceIds, BiFunction<String, String, Optional<ImportAliasType>> importConsumer) {
         this.symbolTable = symbolTable;
         this.globalScope = globalScope;
         this.dynamicProvider = dynamicProvider;
@@ -83,7 +84,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         this.importConsumer = importConsumer;
         this.qilletniStackTrace = qilletniStackTrace;
         this.executionHooks = executionHooks;
-        this.sourceId = sourceId;
+        this.sourceIds = sourceIds;
         this.functionInvoker = new FunctionInvokerImpl(symbolTable, symbolTableMap, nativeFunctionHandler, qilletniStackTrace, executionHooks);
     }
 
@@ -1074,7 +1075,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
 
     private void statementReached(ParserRuleContext ctx) {
         var start = ctx.getStart();
-        executionHooks.statementReached(sourceId, start.getLine(), start.getCharPositionInLine() + 1);
+        executionHooks.statementReached(sourceIds.get(start.getInputStream()), start.getLine(), start.getCharPositionInLine() + 1, symbolTable.currentScope());
     }
 
     @Override
@@ -1294,7 +1295,10 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         if (ctx.ID() != null) {
             importAs = ctx.ID().getText();
         }
-        
+
+        var start = ctx.getStart();
+        executionHooks.importReached(sourceIds.get(start.getInputStream()), start.getLine(), start.getCharPositionInLine() + 1, symbolTable.currentScope());
+
         var importAliasOptional = importConsumer.apply(ctx.STRING().getText(), importAs);
 
         if (importAliasOptional.isPresent()) {
