@@ -196,6 +196,19 @@ public class WeightEntryImpl implements WeightEntry {
         return false;
     }
 
+    /**
+     * @return The value this entry picks tracks from, or {@code null} for a function entry
+     */
+    public QilletniType getSourceValue() {
+        return switch (weightTrackType) {
+            case SINGLE_TRACK -> song;
+            case LIST -> songList;
+            case COLLECTION, ALBUM -> (QilletniType) orderableTypeState.getOrderableType();
+            case WEIGHTS -> weights;
+            case FUNCTION, PLAYLIST -> null;
+        };
+    }
+
     @Override
     public String getTrackStringValue() {
         return switch (weightTrackType) {

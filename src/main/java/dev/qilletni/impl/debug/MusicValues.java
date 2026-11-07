@@ -1,17 +1,16 @@
 package dev.qilletni.impl.debug;
 
 import dev.qilletni.api.auth.ServiceProvider;
-import dev.qilletni.api.lang.types.AlbumType;
-import dev.qilletni.api.lang.types.CollectionType;
-import dev.qilletni.api.lang.types.QilletniType;
-import dev.qilletni.api.lang.types.SongType;
+import dev.qilletni.api.lang.types.*;
 import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
+import dev.qilletni.api.lang.types.weights.WeightEntry;
 import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.lang.types.*;
+import dev.qilletni.impl.lang.types.weights.WeightEntryImpl;
 import dev.qilletni.impl.music.DummyPlaylist;
 
 import java.util.ArrayList;
@@ -41,12 +40,14 @@ final class MusicValues {
             case SongType song -> songSummary(song);
             case AlbumType album -> albumSummary(album);
             case CollectionType collection -> collectionSummary(collection);
+            case WeightsType weights -> weightsSummary(weights);
             case null, default -> null;
         };
     }
 
     static boolean hasChildren(QilletniType value) {
-        return value instanceof SongType || value instanceof AlbumType || value instanceof CollectionType;
+        return value instanceof SongType || value instanceof AlbumType || value instanceof CollectionType
+                || value instanceof WeightsType weights && !weights.getWeightEntries().isEmpty();
     }
 
     /**
@@ -57,6 +58,7 @@ final class MusicValues {
             case SongType song -> songMembers(song, services);
             case AlbumType album -> albumMembers(album, services);
             case CollectionType collection -> collectionMembers(collection, services);
+            case WeightsType weights -> weightsMembers(weights, services);
             case null, default -> List.of();
         };
     }
@@ -267,6 +269,42 @@ final class MusicValues {
             case URL -> List.of(new Member("url", new StringTypeImpl(collectionType.getSuppliedUrl()), ".getUrl()"));
             case PREPOPULATED, SONG_LIST -> List.of();
         };
+    }
+
+    private static String weightsSummary(WeightsType weights) {
+        var count = weights.getWeightEntries().size();
+        return "weights(%d %s)".formatted(count, count == 1 ? "entry" : "entries");
+    }
+
+    /**
+     * One row per entry, named like its source, e.g. {@code [0] |!50%}, holding the value it picks tracks from.
+     */
+    private static List<Member> weightsMembers(WeightsType weights, MusicServices services) {
+        var entries = weights.getWeightEntries();
+        var members = new ArrayList<Member>(entries.size());
+
+        for (int i = 0; i < entries.size(); i++) {
+            var entry = entries.get(i);
+            var source = entry instanceof WeightEntryImpl impl ? impl.getSourceValue() : null;
+            var name = "[%d] %s%s".formatted(i, weightPrefix(entry), weightAmount(entry));
+            members.add(new Member(name, source == null ? new StringTypeImpl("function call") : source, null));
+        }
+
+        return members;
+    }
+
+    private static String weightPrefix(WeightEntry entry) {
+        if (entry.getCanRepeatTrack()) {
+            return "|!";
+        }
+
+        return entry.getCanRepeatWeight() ? "|" : "|~";
+    }
+
+    private static String weightAmount(WeightEntry entry) {
+        var amount = entry.getWeightAmount();
+        var number = amount == Math.rint(amount) ? Long.toString((long) amount) : Double.toString(amount);
+        return number + entry.getWeightUnit().getStringUnit();
     }
 
     private static Optional<Track> peekTrack(SongType song) {
