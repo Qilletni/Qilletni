@@ -38,11 +38,20 @@ public final class StoppedView {
     }
 
     /**
+     * The variables of a scope, or the children of a value. Scopes ignore the filter and paging.
+     *
+     * @param start The first list item to return
+     * @param count How many list items to return, or 0 for all of them
      * @throws IllegalArgumentException If the reference isn't from this stop
      */
-    public List<DebugVariable> variables(int variablesReference) {
-        var scope = handles.get(variablesReference, ScopeHandle.class);
-        return VariableReader.variables(scope.frame(), scope.kind());
+    public List<DebugVariable> variables(int variablesReference, ChildFilter filter, int start, int count) {
+        return switch (handles.get(variablesReference, Object.class)) {
+            case ScopeHandle scope -> VariableReader.variables(scope.frame(), scope.kind()).stream()
+                    .map(binding -> ValueRows.row(binding.name(), binding.value(), binding.name(), binding.property(), handles))
+                    .toList();
+            case ValueHandle value -> ValueRows.children(value, filter, start, count, handles);
+            default -> throw new IllegalArgumentException("Unknown or expired reference %d".formatted(variablesReference));
+        };
     }
 
     private record ScopeHandle(Frame frame, DebugScope.Kind kind) {}

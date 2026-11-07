@@ -4,6 +4,7 @@ import dev.qilletni.api.lang.types.BooleanType;
 import dev.qilletni.api.lang.types.DoubleType;
 import dev.qilletni.api.lang.types.EntityType;
 import dev.qilletni.api.lang.types.IntType;
+import dev.qilletni.api.lang.types.JavaType;
 import dev.qilletni.api.lang.types.ListType;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.StaticEntityType;
@@ -18,7 +19,7 @@ import java.util.stream.Collectors;
  */
 final class ValueFormatter {
 
-    private static final int MAX_LIST_ITEMS = 10;
+    private static final int MAX_ITEMS = 10;
 
     private ValueFormatter() {}
 
@@ -26,18 +27,20 @@ final class ValueFormatter {
         return value(value, 0);
     }
 
-    private static String value(QilletniType value, int depth) {
+    /**
+     * @param depth How deep the value is nested in the one being shown. Only depth 0 shows what's inside
+     */
+    static String value(QilletniType value, int depth) {
         return switch (value) {
             case null -> "null";
             case StringType string -> quote(string.getValue());
             case IntType i -> i.stringValue();
             case DoubleType d -> d.stringValue();
             case BooleanType b -> b.stringValue();
-            case EntityType entity when depth == 0 -> "%s(%s)".formatted(entity.getEntityDefinition().getTypeName(),
-                    entity.getEntityScope().getAllSymbols().values().stream()
-                            .map(field -> "%s = %s".formatted(field.getName(), value(field.getValue(), depth + 1)))
-                            .collect(Collectors.joining(", ")));
+            case EntityType entity when ValueRows.stdMap(entity) != null -> depth == 0 ? "Map(size %d)".formatted(ValueRows.stdMap(entity).size()) : "Map(...)";
+            case EntityType entity when depth == 0 -> entityValue(entity);
             case EntityType entity -> "%s(...)".formatted(entity.getEntityDefinition().getTypeName());
+            case JavaType javaType -> javaType.getOptionalReference(Object.class).map(ValueFormatter::className).orElse("null");
             case StaticEntityType entity -> entity.getEntityDefinition().getTypeName();
             case ListType list when depth == 0 -> listValue(list);
             case ListType list -> list.getItems().isEmpty() ? "[]" : "[...]";
@@ -45,11 +48,25 @@ final class ValueFormatter {
         };
     }
 
+    private static String entityValue(EntityType entity) {
+        var fields = ValueRows.fields(entity);
+        var shown = fields.stream().limit(MAX_ITEMS)
+                .map(field -> "%s = %s".formatted(field.getName(), value(field.getValue(), 1)))
+                .collect(Collectors.joining(", "));
+
+        return "%s(%s%s)".formatted(entity.getEntityDefinition().getTypeName(), shown, fields.size() > MAX_ITEMS ? ", ..." : "");
+    }
+
+    private static String className(Object object) {
+        var name = object.getClass().getSimpleName();
+        return name.isEmpty() ? object.getClass().getName() : name;
+    }
+
     private static String listValue(ListType list) {
         var items = list.getItems();
-        var shown = items.stream().limit(MAX_LIST_ITEMS).map(item -> value(item, 1)).collect(Collectors.joining(", "));
+        var shown = items.stream().limit(MAX_ITEMS).map(item -> value(item, 1)).collect(Collectors.joining(", "));
 
-        if (items.size() > MAX_LIST_ITEMS) {
+        if (items.size() > MAX_ITEMS) {
             return "[%s, ...] (size %d)".formatted(shown, items.size());
         }
 
@@ -74,7 +91,7 @@ final class ValueFormatter {
         return typeClass.getTypeName();
     }
 
-    private static String quote(String string) {
+    static String quote(String string) {
         var builder = new StringBuilder("\"");
 
         for (var c : string.toCharArray()) {

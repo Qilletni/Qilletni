@@ -1,6 +1,7 @@
 package dev.qilletni.impl.debug;
 
 import dev.qilletni.api.lang.table.Scope;
+import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 
 import java.util.ArrayList;
@@ -39,9 +40,9 @@ final class VariableReader {
         return kinds;
     }
 
-    static List<DebugVariable> variables(Frame frame, DebugScope.Kind kind) {
+    static List<Binding> variables(Frame frame, DebugScope.Kind kind) {
         var layout = Layout.of(frame);
-        var variables = new LinkedHashMap<String, DebugVariable>();
+        var variables = new LinkedHashMap<String, Binding>();
 
         switch (kind) {
             case LOCALS -> {
@@ -58,21 +59,27 @@ final class VariableReader {
             }
         }
 
-        return variables.values().stream().sorted(Comparator.comparing(DebugVariable::name)).toList();
+        return variables.values().stream().sorted(Comparator.comparing(Binding::name)).toList();
     }
+
+    /**
+     * A variable visible in a frame.
+     *
+     * @param property If it is an entity field
+     */
+    record Binding(String name, QilletniType value, boolean property) {}
 
     /**
      * Adds the scope's variables that an inner scope hasn't already shadowed.
      */
-    private static void addVariables(LinkedHashMap<String, DebugVariable> variables, Scope scope, boolean property) {
+    private static void addVariables(LinkedHashMap<String, Binding> variables, Scope scope, boolean property) {
         for (var symbol : scope.getAllSymbols().values()) {
             var type = symbol.getType();
             if (QilletniTypeClass.FUNCTION.equals(type) || QilletniTypeClass.IMPORT_ALIAS.equals(type) || variables.containsKey(symbol.getName())) {
                 continue;
             }
 
-            var value = symbol.getValue();
-            variables.put(symbol.getName(), new DebugVariable(symbol.getName(), ValueFormatter.value(value), ValueFormatter.type(value), symbol.getName(), 0, property));
+            variables.put(symbol.getName(), new Binding(symbol.getName(), symbol.getValue(), property));
         }
     }
 

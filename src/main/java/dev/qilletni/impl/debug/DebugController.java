@@ -311,7 +311,9 @@ public class DebugController implements ExecutionHooks {
                 var work = (WorkItem) item;
                 try {
                     work.run().run();
-                } catch (RuntimeException e) {
+                } catch (DebugAbortedException e) {
+                    throw e;
+                } catch (Throwable e) {
                     work.fail().accept(e);
                 }
             }
