@@ -35,6 +35,9 @@ public class DebugController implements ExecutionHooks {
     private int nextBreakpointId = 1;
 
     private static final WorkItem RESUME = new WorkItem(() -> {}, e -> {});
+    private static final WorkItem ABORT = new WorkItem(() -> {}, e -> {});
+
+    private volatile boolean aborted;
 
     private final Object suspensionLock = new Object();
 
@@ -45,11 +48,10 @@ public class DebugController implements ExecutionHooks {
 
     private volatile DebugEventListener eventListener;
 
-    // Only touched on the interpreter thread
-    private final Deque<String> functionNames = new ArrayDeque<>();
-    private SourceId lastSource;
-    private int lastLine;
-    private int lastDepth;
+    /**
+     * The top level, then one entry per function call, innermost first. Only touched on the interpreter thread.
+     */
+    private final Deque<CallFrame> callFrames = new ArrayDeque<>(List.of(new CallFrame(null)));
 
     /**
      * Replaces every breakpoint in a source.
@@ -123,6 +125,20 @@ public class DebugController implements ExecutionHooks {
         }
     }
 
+    /**
+     * Ends the program: the interpreter thread throws {@link DebugAbortedException} at its next statement, or right
+     * away if it is stopped.
+     */
+    public void abort() {
+        aborted = true;
+
+        synchronized (suspensionLock) {
+            if (suspension != null) {
+                suspension.queue().add(ABORT);
+            }
+        }
+    }
+
     @Override
     public void sourceParsed(SourceId source, Set<Integer> breakableLines) {
         if (source.path() == null) {
@@ -136,12 +152,18 @@ public class DebugController implements ExecutionHooks {
 
     @Override
     public void statementReached(SourceId source, int line, int column) {
-        var depth = functionNames.size();
-        var sameLine = line == lastLine && depth == lastDepth && source.equals(lastSource);
+        if (aborted) {
+            throw new DebugAbortedException();
+        }
 
-        lastSource = source;
-        lastLine = line;
-        lastDepth = depth;
+        var frame = callFrames.peek();
+
+        // A later statement on the line this frame just ran doesn't stop again; running the line again (a loop) does
+        var sameLine = line == frame.lastLine && column > frame.lastColumn && source.equals(frame.lastSource);
+
+        frame.lastSource = source;
+        frame.lastLine = line;
+        frame.lastColumn = column;
 
         if (sameLine || breakpoints.isEmpty() || source.path() == null) {
             return;
@@ -151,18 +173,18 @@ public class DebugController implements ExecutionHooks {
         var id = lineIds == null ? null : lineIds.get(line);
 
         if (id != null) {
-            suspend(new StopLocation(source, line, column, functionNames.peek()), "breakpoint", List.of(id));
+            suspend(new StopLocation(source, line, column, frame.functionName), "breakpoint", List.of(id));
         }
     }
 
     @Override
     public void functionEntered(String name) {
-        functionNames.push(name);
+        callFrames.push(new CallFrame(name));
     }
 
     @Override
     public void functionExited() {
-        functionNames.pop();
+        callFrames.pop();
     }
 
     /**
@@ -177,6 +199,11 @@ public class DebugController implements ExecutionHooks {
         }
 
         try {
+            // abort() sets the flag before taking the lock, so it either saw this suspension or is seen here
+            if (aborted) {
+                throw new DebugAbortedException();
+            }
+
             var listener = eventListener;
             if (listener != null) {
                 listener.stopped(reason, hitBreakpointIds);
@@ -186,6 +213,10 @@ public class DebugController implements ExecutionHooks {
                 var item = current.queue().take();
                 if (item == RESUME) {
                     break;
+                }
+
+                if (item == ABORT) {
+                    throw new DebugAbortedException();
                 }
 
                 try {
@@ -203,14 +234,42 @@ public class DebugController implements ExecutionHooks {
 
             WorkItem leftover;
             while ((leftover = current.queue().poll()) != null) {
-                if (leftover != RESUME) {
+                if (leftover != RESUME && leftover != ABORT) {
                     leftover.fail().accept(new IllegalStateException("The program resumed"));
                 }
             }
         }
     }
 
+    /**
+     * The top level or one function call, with the last statement it reached.
+     */
+    private static final class CallFrame {
+
+        private final String functionName;
+        private SourceId lastSource;
+        private int lastLine;
+        private int lastColumn;
+
+        private CallFrame(String functionName) {
+            this.functionName = functionName;
+        }
+    }
+
+    /**
+     * A unit of work for the stopped interpreter thread, or one of the {@link #RESUME} and {@link #ABORT} sentinels.
+     *
+     * @param run  Runs the work and completes its future, on the interpreter thread
+     * @param fail Completes the future exceptionally, if {@code run} throws or the program resumes before it runs
+     */
     private record WorkItem(Runnable run, Consumer<Throwable> fail) {}
 
+    /**
+     * One stop of the program. A new one is created for every stop, so work queued for an earlier stop can never
+     * run in a later one.
+     *
+     * @param location Where the program is stopped
+     * @param queue    Work for the interpreter thread to run until it takes {@link #RESUME} or {@link #ABORT}
+     */
     private record Suspension(StopLocation location, BlockingQueue<WorkItem> queue) {}
 }

@@ -7,6 +7,7 @@ import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.lib.annotations.BeforeAnyInvocation;
 import dev.qilletni.api.lib.annotations.NativeOn;
+import dev.qilletni.impl.debug.DebugAbortedException;
 import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.exceptions.NativeMethodNotBoundException;
@@ -168,6 +169,10 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
         Throwable throwable = e;
         if (throwable instanceof InvocationTargetException ite) {
             throwable = ite.getCause();
+        }
+
+        if (throwable instanceof DebugAbortedException debugAborted) {
+            throw debugAborted;
         }
 
         var theirMessage = throwable.getMessage();
