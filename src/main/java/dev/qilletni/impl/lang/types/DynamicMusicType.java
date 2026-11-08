@@ -104,6 +104,20 @@ public class DynamicMusicType<T> {
         return musicTypeMap.containsKey(dynamicProvider.getCurrentProvider()) || get(true) != null;
     }
     
+    /**
+     * @return The music type for the current service provider, without converting or fetching anything
+     */
+    public Optional<T> peek() {
+        return Optional.ofNullable(musicTypeMap.get(dynamicProvider.getCurrentProvider()));
+    }
+
+    /**
+     * @return The music type for any service provider it has been loaded for, without converting or fetching anything
+     */
+    public Optional<Map.Entry<ServiceProvider, T>> peekAny() {
+        return musicTypeMap.entrySet().stream().findFirst();
+    }
+
     private <V> List<V> castValues(Class<V> clazz) {
         return musicTypeMap.values().stream().map(clazz::cast).toList();
     }

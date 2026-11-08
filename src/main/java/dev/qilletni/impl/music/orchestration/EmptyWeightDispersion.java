@@ -1,7 +1,5 @@
 package dev.qilletni.impl.music.orchestration;
 
-import dev.qilletni.api.lang.types.weights.WeightEntry;
-
 import java.util.Optional;
 
 public class EmptyWeightDispersion extends WeightDispersion {
@@ -11,7 +9,7 @@ public class EmptyWeightDispersion extends WeightDispersion {
     }
 
     @Override
-    public Optional<WeightEntry> selectWeight() {
+    public Optional<Selection> select() {
         return Optional.empty();
     }
 }

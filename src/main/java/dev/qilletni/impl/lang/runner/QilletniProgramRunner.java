@@ -14,6 +14,9 @@ import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.antlr.QilletniLexer;
 import dev.qilletni.impl.antlr.QilletniParser;
+import dev.qilletni.impl.debug.BreakableLines;
+import dev.qilletni.impl.debug.ExecutionHooks;
+import dev.qilletni.impl.debug.SourceId;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.docs.exceptions.DocErrorListener;
 import dev.qilletni.impl.lang.exceptions.QilletniNativeInvocationException;
@@ -76,6 +79,10 @@ public class QilletniProgramRunner {
     private final LibraryRegistrar libraryRegistrar;
     private final BackgroundTaskExecutorImpl backgroundTaskExecutor;
     private final QilletniStackTrace qilletniStackTrace;
+    private ExecutionHooks executionHooks = ExecutionHooks.NONE;
+
+    // A function's body runs in its caller's visitor, so a statement's source comes from its own char stream
+    private final Map<CharStream, SourceId> sourceIds = new IdentityHashMap<>();
 
     // Import cache to avoid importing the same file multiple times
     private final Set<ImportPathState> importCache = new HashSet<>();
@@ -143,10 +150,14 @@ public class QilletniProgramRunner {
         
         if (debugSupport.isDebugEnabled()) {
             LOGGER.debug("Debugging enabled");
-            nativeFunctionHandler.addScopedInjectableInstanceByNames(debugSupport, List.of("dev.qilletni.lib.core.BreakpointFunctions", "dev.qilletni.lib.core.DebugFunctions"));
+            allowDebugSupportInjection();
         } else {
             LOGGER.debug("Debugging disabled");
         }
+    }
+
+    private void allowDebugSupportInjection() {
+        nativeFunctionHandler.addScopedInjectableInstanceByNames(debugSupport, List.of("dev.qilletni.lib.core.BreakpointFunctions", "dev.qilletni.lib.core.DebugFunctions"));
     }
 
     private static TypeAdapterRegistrar initializeTypeAdapterRegistrar(TypeAdapterRegistrar typeAdapterRegistrar, EntityInitializer entityInitializer, TypeConverter typeConverter, ListInitializer listInitializer) {
@@ -205,6 +216,20 @@ public class QilletniProgramRunner {
         return typeAdapterRegistrar;
     }
 
+    /**
+     * Sets the hooks notified as the program runs. Must be called before any Qilletni code runs.
+     */
+    public void setExecutionHooks(ExecutionHooks executionHooks) {
+        this.executionHooks = executionHooks;
+        nativeFunctionHandler.setExecutionHooks(executionHooks);
+        debugSupport.setExecutionHooks(executionHooks);
+
+        // An attached debugger handles breakpoint(), even without the debug package config
+        if (executionHooks != ExecutionHooks.NONE && !debugSupport.isDebugEnabled()) {
+            allowDebugSupportInjection();
+        }
+    }
+
     public void importInitialFiles() {
         LOGGER.debug("Importing {} initial files!", libraryRegistrar.getAutoImportFiles().size());
 
@@ -217,27 +242,36 @@ public class QilletniProgramRunner {
     }
 
     public SymbolTable runProgram(Path file, Scope global) throws IOException {
-        var parent = file.getParent();
-        if (file.getParent() == null) {
-            LOGGER.debug("File '{}' has no parent", file);
-            parent = Paths.get("");
-        }
-        
-        return runProgram(file, new ImportPathState(parent), global);
+        return runProgram(parseProgram(file), global);
     }
 
-    private SymbolTable runProgram(Path file, ImportPathState pathState, Scope global) throws IOException {
-        return runProgram(CharStreams.fromString(Files.readString(file), file.getFileName().toString()), pathState, global);
+    /**
+     * Parses a program file without running it, so its source is known (and reported to the {@link ExecutionHooks})
+     * before any Qilletni code runs. Run it with {@link #runProgram(ParsedProgram)}.
+     */
+    public ParsedProgram parseProgram(Path file) throws IOException {
+        var sourceId = SourceId.ofFile(file);
+        var programContext = parse(CharStreams.fromString(Files.readString(file), file.getFileName().toString()), sourceId);
+
+        return new ParsedProgram(programContext, new ImportPathState(file.toAbsolutePath().normalize()), sourceId);
+    }
+
+    public SymbolTable runProgram(ParsedProgram program) {
+        return runProgram(program, null);
+    }
+
+    public SymbolTable runProgram(ParsedProgram program, Scope global) {
+        return execute(program.programContext, program.pathState, global, program.sourceId);
     }
 
     private SymbolTable runProgram(InputStream stream, ImportPathState pathState, Scope globalScope) throws IOException {
         var data = new String(new BufferedInputStream(stream).readAllBytes());
-        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope);
+        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope, importedSourceId(pathState));
     }
 
     private SymbolTable runProgram(String data, ImportPathState pathState, Scope globalScope) throws IOException {
 //        var data = new String(new BufferedInputStream(stream).readAllBytes());
-        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope);
+        return runProgram(CharStreams.fromString(data, pathState.path().getFileName().toString()), pathState, globalScope, importedSourceId(pathState));
     }
 
     public SymbolTable runProgram(CharStream charStream, ImportPathState pathState) {
@@ -245,6 +279,43 @@ public class QilletniProgramRunner {
     }
 
     public SymbolTable runProgram(CharStream charStream, ImportPathState pathState, Scope globalScope) {
+        return runProgram(charStream, pathState, globalScope, SourceId.ofName(charStream.getSourceName()));
+    }
+
+    private SourceId importedSourceId(ImportPathState pathState) throws IOException {
+        if (pathState.libraryName() == null) {
+            if (Files.isRegularFile(pathState.path())) {
+                return SourceId.ofFile(pathState.path());
+            }
+
+            return SourceId.ofName(pathState.path().getFileName().toString());
+        }
+
+        var diskPath = libraryRegistrar.getLibrarySourceFileResolver().resolveDiskPath(pathState.libraryName(), pathState.path().toString().replace("\\", "/"));
+        if (diskPath.isPresent()) {
+            return SourceId.ofFile(diskPath.get());
+        }
+
+        return SourceId.ofLibrary(pathState.libraryName(), pathState.path().toString());
+    }
+
+    /**
+     * Reads an imported file: from disk if it has no library and exists there, otherwise from its library or the
+     * classpath.
+     */
+    private String readImport(ImportPathState pathState) throws IOException {
+        if (pathState.libraryName() == null && Files.isRegularFile(pathState.path())) {
+            return Files.readString(pathState.path());
+        }
+
+        return libraryRegistrar.findLibraryByPath(pathState.libraryName(), pathState.path()).orElseThrow(FileNotFoundException::new);
+    }
+
+    private SymbolTable runProgram(CharStream charStream, ImportPathState pathState, Scope globalScope, SourceId sourceId) {
+        return execute(parse(charStream, sourceId), pathState, globalScope, sourceId);
+    }
+
+    private QilletniParser.ProgContext parse(CharStream charStream, SourceId sourceId) {
         var lexer = new QilletniLexer(charStream);
         var tokenStream = new CommonTokenStream(lexer);
         var qilletniParser = new QilletniParser(tokenStream);
@@ -253,19 +324,31 @@ public class QilletniProgramRunner {
         lexer.addErrorListener(new DocErrorListener());
         qilletniParser.addErrorListener(new DocErrorListener());
 
+        var programContext = qilletniParser.prog();
+        sourceIds.put(charStream, sourceId);
+        executionHooks.sourceParsed(sourceId, BreakableLines.collect(programContext));
+
+        return programContext;
+    }
+
+    private SymbolTable execute(QilletniParser.ProgContext programContext, ImportPathState pathState, Scope globalScope, SourceId sourceId) {
         var globalOverride = globalScope == null ? this.globalScope : globalScope;
 
         var symbolTable = new SymbolTableImpl(pathState.path().toString());
 
         LOGGER.debug("global override: {}", globalScope);
 
-        QilletniParser.ProgContext programContext = qilletniParser.prog();
-        var qilletniVisitor = new QilletniVisitor(symbolTable, symbolTables, globalOverride, dynamicProvider, entityDefinitionManager, nativeFunctionHandler, musicPopulator, listTypeTransformer, backgroundTaskExecutor, debugSupport, qilletniStackTrace,
+        var qilletniVisitor = new QilletniVisitor(symbolTable, symbolTables, globalOverride, dynamicProvider, entityDefinitionManager, nativeFunctionHandler, musicPopulator, listTypeTransformer, backgroundTaskExecutor, debugSupport, qilletniStackTrace, executionHooks, sourceIds,
                 (importedFile, importAs) -> importFileFromStream(pathState.importFrom(importedFile), importAs, globalOverride));
         
         symbolTables.put(symbolTable, qilletniVisitor);
 
-        qilletniVisitor.visit(programContext);
+        executionHooks.fileEntered(sourceId, qilletniVisitor);
+        try {
+            qilletniVisitor.visit(programContext);
+        } finally {
+            executionHooks.fileExited();
+        }
 
         return symbolTable;
     }
@@ -287,7 +370,7 @@ public class QilletniProgramRunner {
                 global = new ScopeImpl(globalScope, Scope.ScopeType.ALIASED_GLOBAL, "FG " + pathState.path());
             }
 
-            var symbolTable = runProgram(libraryRegistrar.findLibraryByPath(pathState.libraryName(), pathState.path()).orElseThrow(FileNotFoundException::new), pathState, global);
+            var symbolTable = runProgram(readImport(pathState), pathState, global);
 
             importCache.add(pathState);
 

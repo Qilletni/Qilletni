@@ -5,6 +5,7 @@ import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.impl.lang.types.orderable.OrderableTracksTypeInitializer;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -28,6 +29,13 @@ public class OrderableTypeStateImpl implements OrderableTypeState {
     @Override
     public OrderableTracksType getOrderableType() {
         return orderableType;
+    }
+
+    /**
+     * @return The tracks being played, in their original order
+     */
+    public List<Track> getTracks() {
+        return Collections.unmodifiableList(tracks);
     }
 
     @Override

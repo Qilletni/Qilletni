@@ -12,6 +12,7 @@ import dev.qilletni.api.lang.types.ImportAliasType;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.StaticEntityType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
+import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.exceptions.FunctionDidntReturnException;
 import dev.qilletni.impl.lang.exceptions.FunctionInvocationException;
@@ -37,6 +38,7 @@ public class FunctionInvokerImpl implements FunctionInvoker {
     
     // There is a FunctionInvokerImpl for every native method call (and in QilletniVisitor, which is not copied), so this can persist from invocation
     private final QilletniStackTrace currentStackTrace;
+    private final ExecutionHooks executionHooks;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FunctionInvokerImpl.class);
     
@@ -46,11 +48,12 @@ public class FunctionInvokerImpl implements FunctionInvoker {
 //        this(symbolTable, symbolTableMap, nativeFunctionHandler, null);
 //    }
 
-    public FunctionInvokerImpl(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, NativeFunctionHandler nativeFunctionHandler, QilletniStackTrace qilletniStackTrace) {
+    public FunctionInvokerImpl(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, NativeFunctionHandler nativeFunctionHandler, QilletniStackTrace qilletniStackTrace, ExecutionHooks executionHooks) {
         this.symbolTable = symbolTable;
         this.symbolTableMap = symbolTableMap;
         this.nativeFunctionHandler = nativeFunctionHandler;
         this.currentStackTrace = qilletniStackTrace;
+        this.executionHooks = executionHooks;
     }
 
     @Override
@@ -81,6 +84,7 @@ public class FunctionInvokerImpl implements FunctionInvoker {
     private <T extends QilletniType> Optional<T> invokeFunction(String functionName, List<QilletniType> params, QilletniType invokedOn, FunctionType alreadyFoundFunction, Runnable pushStackTrace) {
         LOGGER.debug("invokedOn = {}", invokedOn == null ? "-" : invokedOn.getTypeClass());
         var hasOnType = invokedOn != null;
+        var callerScope = symbolTable.currentScope();
 
         var swappedLookupScope = false;
         
@@ -168,9 +172,15 @@ public class FunctionInvokerImpl implements FunctionInvoker {
             LOGGER.debug("Invoking native! {}", functionType.getName());
             LOGGER.debug("symtab = {}", symbolTable.currentScope());
             pushStackTrace.run();
-            
-            var res = Optional.ofNullable((T) nativeFunctionHandler.invokeNativeMethod(symbolTable, currentStackTrace, functionType.getName(), params, functionType.getDefinedParamCount(), invokingUponExpressionType));
-            
+            executionHooks.functionEntered(functionType, callerScope, symbolTableMap.get(symbolTable));
+
+            Optional<T> res;
+            try {
+                res = Optional.ofNullable((T) nativeFunctionHandler.invokeNativeMethod(symbolTable, currentStackTrace, functionType.getName(), params, functionType.getDefinedParamCount(), invokingUponExpressionType));
+            } finally {
+                executionHooks.functionExited();
+            }
+
             currentStackTrace.popStackTraceElement();
             symbolTable.endFunctionCall();
             return res;
@@ -189,8 +199,14 @@ public class FunctionInvokerImpl implements FunctionInvoker {
         LOGGER.debug("pushStackTrace = {}", pushStackTrace);
         pushStackTrace.run();
         LOGGER.debug("pushed stack trace AFTER");
-        
-        Optional<T> result = symbolTableMap.get(symbolTable).visitNode(functionType.getBody());
+        executionHooks.functionEntered(functionType, callerScope, symbolTableMap.get(symbolTable));
+
+        Optional<T> result;
+        try {
+            result = symbolTableMap.get(symbolTable).visitNode(functionType.getBody());
+        } finally {
+            executionHooks.functionExited();
+        }
 
         currentStackTrace.popStackTraceElement();
         symbolTable.endFunctionCall();

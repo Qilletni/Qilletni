@@ -8,14 +8,30 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 
-@Deprecated
+/**
+ * A weight entry whose track comes from a function call, made again every time the entry is picked.
+ */
 public class LazyWeightEntry extends WeightEntryImpl {
 
     private final Supplier<Track> trackSupplier;
+    private final String callText;
 
-    public LazyWeightEntry(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, boolean canRepeatTrack, boolean canRepeatWeight, Supplier<Track> trackSupplier) {
+    /**
+     * @param callText The call as written in the source, e.g. {@code mySongFunc()}
+     */
+    public LazyWeightEntry(int weightAmount, WeightUnit weightUnit, DynamicProvider dynamicProvider, boolean canRepeatTrack, boolean canRepeatWeight, String callText, Supplier<Track> trackSupplier) {
         super(weightAmount, weightUnit, null, dynamicProvider, canRepeatTrack, canRepeatWeight);
+        this.callText = callText;
         this.trackSupplier = trackSupplier;
+    }
+
+    public String getCallText() {
+        return callText;
+    }
+
+    @Override
+    public String getTrackStringValue() {
+        return callText;
     }
 
     @Override

@@ -4,6 +4,7 @@ import dev.qilletni.api.auth.ServiceProvider;
 import dev.qilletni.api.lib.qll.QllInfo;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.supplier.DynamicProvider;
+import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lib.persistence.PackageConfigImpl;
 import dev.qilletni.impl.music.MusicPopulatorImpl;
 import dev.qilletni.impl.music.orchestration.DefaultTrackOrchestrator;
@@ -20,6 +21,13 @@ public class ServiceManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(ServiceManager.class);
     
     public static DynamicProviderCreation createDynamicProvider(List<QllInfo> qllInfos) {
+        return createDynamicProvider(qllInfos, ExecutionHooks.NONE);
+    }
+
+    /**
+     * @param executionHooks Told about every track played and weighted selection made
+     */
+    public static DynamicProviderCreation createDynamicProvider(List<QllInfo> qllInfos, ExecutionHooks executionHooks) {
         var providers = qllInfos.stream()
                 .map(QllInfo::providerClass)
                 .filter(Objects::nonNull)
@@ -32,7 +40,7 @@ public class ServiceManager {
         for (var provider : providers) {
             // Pass in unloaded PackageConfig to the provider. They don't have to load it (or create one) if they don't need to.
             var packageConfig = PackageConfigImpl.createPackageConfig(provider.getName());
-            provider.initialize((playActor, musicCache) -> new DefaultTrackOrchestrator(playActor, musicCache, musicPopulator), packageConfig).exceptionally(t -> {
+            provider.initialize((playActor, musicCache) -> new DefaultTrackOrchestrator(playActor, musicCache, musicPopulator, executionHooks), packageConfig).exceptionally(t -> {
                 LOGGER.error("Failed to initialize service provider: {}", provider.getName(), t);
                 return null;
             }).join();

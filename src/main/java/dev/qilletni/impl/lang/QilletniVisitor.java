@@ -22,6 +22,10 @@ import dev.qilletni.impl.StringUtility;
 import dev.qilletni.impl.antlr.QilletniLexer;
 import dev.qilletni.impl.antlr.QilletniParser;
 import dev.qilletni.impl.antlr.QilletniParserBaseVisitor;
+import dev.qilletni.impl.debug.BreakableLines;
+import dev.qilletni.impl.debug.ExecutionHooks;
+import dev.qilletni.impl.debug.SourceId;
+import dev.qilletni.impl.debug.SourceSpan;
 import dev.qilletni.impl.lang.exceptions.*;
 import dev.qilletni.impl.lang.internal.BackgroundTaskExecutorImpl;
 import dev.qilletni.impl.lang.internal.FunctionInvokerImpl;
@@ -36,8 +40,11 @@ import dev.qilletni.impl.lang.types.entity.EntityDefinitionImpl;
 import dev.qilletni.impl.lang.types.entity.FunctionPopulator;
 import dev.qilletni.impl.lang.types.entity.UninitializedTypeImpl;
 import dev.qilletni.impl.lang.types.list.ListTypeTransformer;
+import dev.qilletni.impl.lang.types.weights.LazyWeightEntry;
 import dev.qilletni.impl.lang.types.weights.WeightEntryImpl;
+import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,8 +72,10 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
     private final BiFunction<String, String, Optional<ImportAliasType>> importConsumer;
     private final FunctionInvokerImpl functionInvoker;
     private final QilletniStackTrace qilletniStackTrace;
+    private final ExecutionHooks executionHooks;
+    private final Map<CharStream, SourceId> sourceIds;
 
-    public QilletniVisitor(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, Scope globalScope, DynamicProvider dynamicProvider, EntityDefinitionManager entityDefinitionManager, NativeFunctionHandler nativeFunctionHandler, MusicPopulator musicPopulator, ListTypeTransformer listTypeTransformer, BackgroundTaskExecutorImpl backgroundTaskExecutor, DebugSupportImpl debugSupport, QilletniStackTrace qilletniStackTrace, BiFunction<String, String, Optional<ImportAliasType>> importConsumer) {
+    public QilletniVisitor(SymbolTable symbolTable, Map<SymbolTable, QilletniVisitor> symbolTableMap, Scope globalScope, DynamicProvider dynamicProvider, EntityDefinitionManager entityDefinitionManager, NativeFunctionHandler nativeFunctionHandler, MusicPopulator musicPopulator, ListTypeTransformer listTypeTransformer, BackgroundTaskExecutorImpl backgroundTaskExecutor, DebugSupportImpl debugSupport, QilletniStackTrace qilletniStackTrace, ExecutionHooks executionHooks, Map<CharStream, SourceId> sourceIds, BiFunction<String, String, Optional<ImportAliasType>> importConsumer) {
         this.symbolTable = symbolTable;
         this.globalScope = globalScope;
         this.dynamicProvider = dynamicProvider;
@@ -77,7 +86,9 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         this.debugSupport = debugSupport;
         this.importConsumer = importConsumer;
         this.qilletniStackTrace = qilletniStackTrace;
-        this.functionInvoker = new FunctionInvokerImpl(symbolTable, symbolTableMap, nativeFunctionHandler, qilletniStackTrace);
+        this.executionHooks = executionHooks;
+        this.sourceIds = sourceIds;
+        this.functionInvoker = new FunctionInvokerImpl(symbolTable, symbolTableMap, nativeFunctionHandler, qilletniStackTrace, executionHooks);
     }
 
     @Override
@@ -85,6 +96,46 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         symbolTable.initScope(globalScope);
         ctx.children.forEach(this::visitNode);
         return null;
+    }
+
+    public MusicPopulator getMusicPopulator() {
+        return musicPopulator;
+    }
+
+    public EntityDefinitionManager getEntityDefinitionManager() {
+        return entityDefinitionManager;
+    }
+
+    public DynamicProvider getDynamicProvider() {
+        return dynamicProvider;
+    }
+
+    /**
+     * Runs {@code work} with {@code scope} as the current scope, without background tasks. Afterwards the scopes and
+     * stack trace are put back as they were, even if it throws partway through a function call.
+     */
+    public <T> T runInScope(Scope scope, Supplier<T> work) {
+        var scopeStack = symbolTable.getAllScopes();
+        var scopeDepth = scopeStack.size();
+        var stackTraceDepth = qilletniStackTrace.getStackTrace().size();
+        var backgroundTasksBlocked = backgroundTaskExecutor.blockBackgroundTasks(true);
+
+        symbolTable.swapScope(scope);
+        try {
+            return work.get();
+        } finally {
+            while (scopeStack.size() > scopeDepth + 1) {
+                scopeStack.pop();
+            }
+
+            symbolTable.unswapScope();
+
+            while (qilletniStackTrace.getStackTrace().size() > stackTraceDepth) {
+                qilletniStackTrace.popStackTraceElement();
+            }
+
+            backgroundTaskExecutor.blockBackgroundTasks(backgroundTasksBlocked);
+        }
     }
 
     @Override
@@ -1053,6 +1104,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
     @Override
     public Optional<QilletniType> visitBody(QilletniParser.BodyContext ctx) {
         if (ctx.return_stmt() != null) {
+            statementReached(ctx.return_stmt());
             return Optional.of(visitQilletniTypedNode(ctx.return_stmt()));
         }
 
@@ -1064,8 +1116,17 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         return Optional.empty();
     }
 
+    private void statementReached(ParserRuleContext ctx) {
+        var start = ctx.getStart();
+        executionHooks.statementReached(sourceIds.get(start.getInputStream()), start.getLine(), start.getCharPositionInLine() + 1, symbolTable.currentScope());
+    }
+
     @Override
     public Optional<QilletniType> visitBody_stmt(QilletniParser.Body_stmtContext ctx) {
+        if (BreakableLines.isBreakable(ctx)) {
+            statementReached(ctx);
+        }
+
         if (ctx.if_stmt() != null) {
             return visitNode(ctx.if_stmt());
         }
@@ -1277,7 +1338,10 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         if (ctx.ID() != null) {
             importAs = ctx.ID().getText();
         }
-        
+
+        var start = ctx.getStart();
+        executionHooks.importReached(sourceIds.get(start.getInputStream()), start.getLine(), start.getCharPositionInLine() + 1, symbolTable.currentScope());
+
         var importAliasOptional = importConsumer.apply(ctx.STRING().getText(), importAs);
 
         if (importAliasOptional.isPresent()) {
@@ -1346,8 +1410,51 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         return new WeightsTypeImpl(weights);
     }
 
+    /**
+     * A weight entry that calls {@code expr} again in the scope it was written in every time it's picked.
+     */
+    private LazyWeightEntry lazyWeightEntry(QilletniParser.ExprContext expr, int weightAmount, WeightUnit weightUnit, boolean canRepeatTrack, boolean canRepeatWeight) {
+        var scope = symbolTable.currentScope();
+        var callText = expr.getStart().getInputStream().getText(Interval.of(expr.getStart().getStartIndex(), expr.getStop().getStopIndex()));
+
+        return new LazyWeightEntry(weightAmount, weightUnit, dynamicProvider, canRepeatTrack, canRepeatWeight, callText, () -> {
+            var song = runInScope(scope, () -> visitQilletniTypedNode(expr, SongType.class));
+            musicPopulator.populateSong(song);
+            return song.getTrack();
+        });
+    }
+
+    /**
+     * @return If {@code expr} is just a function call, e.g. {@code mySongFunc()} or {@code songs.next()}
+     */
+    private static boolean isCall(QilletniParser.ExprContext expr) {
+        ParseTree node = expr;
+        while (!(node instanceof QilletniParser.PostfixExprContext postfix)) {
+            if (node.getChildCount() != 1) {
+                return false;
+            }
+
+            node = node.getChild(0);
+        }
+
+        var suffixes = postfix.postfixSuffix();
+        return suffixes.isEmpty() ? postfix.primaryExpr().function_call() != null : suffixes.getLast().function_call() != null;
+    }
+
     @Override
     public WeightEntry visitSingle_weight(QilletniParser.Single_weightContext ctx) {
+        var entry = weightEntry(ctx);
+        var source = sourceIds.get(ctx.getStart().getInputStream());
+        if (entry instanceof WeightEntryImpl impl && source != null) {
+            var stop = ctx.getStop();
+            var stopLength = stop.getStopIndex() - stop.getStartIndex() + 1;
+            impl.setSourceSpan(new SourceSpan(source, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine() + 1,
+                    stop.getLine(), stop.getCharPositionInLine() + 1 + stopLength));
+        }
+        return entry;
+    }
+
+    private WeightEntry weightEntry(QilletniParser.Single_weightContext ctx) {
         var weightAmount = ctx.weight_amount();
         var weightInt = Integer.parseInt(weightAmount.INT().getText());
 
@@ -1358,10 +1465,9 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         
         var weightUnit = WeightUnit.fromSymbol(weightAmount.WEIGHT_UNIT().getText());
         
-        // TODO: Reimplement functions in weights!
-//        if (ctx.expr().function_call() != null) {
-//            return new LazyWeightEntry(weightInt, weightUnit, dynamicProvider, canRepeatTrack, canRepeatWeight, visitQilletniTypedNode(ctx.expr(), SongType.class)::getTrack);
-//        }
+        if (isCall(ctx.expr())) {
+            return lazyWeightEntry(ctx.expr(), weightInt, weightUnit, canRepeatTrack, canRepeatWeight);
+        }
         
         QilletniType weightValue = visitQilletniTypedNode(ctx.expr());
         
@@ -1762,7 +1868,8 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                 if (qce.getQilletniStackTrace() == null) {
                     qce.setQilletniStackTrace(qilletniStackTrace);
                 }
-                
+
+                executionHooks.errorRaised(qce);
                 throw e;
             } else {
                 QilletniContextException qce;
@@ -1774,7 +1881,8 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
                 }
 
                 qce.setQilletniStackTrace(qilletniStackTrace);
-                
+
+                executionHooks.errorRaised(qce);
                 throw qce;
             }
         }

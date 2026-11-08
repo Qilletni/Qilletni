@@ -19,5 +19,12 @@ public interface DebugSupport {
     void exitBreakpoint();
     
     boolean isInBreakpoint();
+
+    /**
+     * Hands a {@code breakpoint()} call to an attached debugger, which stops the program until the user resumes it.
+     *
+     * @return If a debugger handled the call, so no REPL should open
+     */
+    boolean debuggerBreakpoint();
     
 }

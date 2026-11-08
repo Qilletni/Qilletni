@@ -5,6 +5,7 @@ module qilletni.impl {
     exports dev.qilletni.impl.lib.persistence;
     exports dev.qilletni.impl.lang.docs;
     exports dev.qilletni.impl.lang.runner;
+    exports dev.qilletni.impl.debug;
 
     requires qilletni.api;
     requires org.antlr.antlr4.runtime;
