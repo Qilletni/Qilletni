@@ -407,16 +407,11 @@ public class DefaultTrackOrchestrator implements TrackOrchestrator {
 
                 playCallback.accept(weightedTrack);
 
+                // Repeat rules only block the very next pick, so this pick replaces the last one's
                 // If only the current track can't be repeated, don't play the next track
-                if (!weightEntry.getCanRepeatTrack()) {
-                    dontPlayNextTrack = weightedTrack;
-                }
-
                 // If the weight can't be repeated, don't play the next track OR weight
-                if (!weightEntry.getCanRepeatWeight()) {
-                    dontPlayNextTrack = weightedTrack;
-                    dontPlayNextWeight = weightEntry;
-                }
+                dontPlayNextTrack = !weightEntry.getCanRepeatTrack() || !weightEntry.getCanRepeatWeight() ? weightedTrack : null;
+                dontPlayNextWeight = !weightEntry.getCanRepeatWeight() ? weightEntry : null;
 
                 return SelectionResult.TRACK_SELECTED;
             }
