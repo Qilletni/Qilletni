@@ -35,6 +35,22 @@ final class ValueRows {
         return new DebugVariable(name, ValueFormatter.value(value), ValueFormatter.type(value), evaluateName, reference, indexed, property);
     }
 
+    static DebugVariable musicRow(MusicStop.Row row, HandleRegistry handles) {
+        return switch (row) {
+            case MusicStop.Value value -> row(value.name(), value.value(), null, false, handles);
+            case MusicStop.Text text -> new DebugVariable(text.name(), text.value(), "", null, 0, 0, false);
+            case MusicStop.Group group -> groupRow(group, handles);
+        };
+    }
+
+    /**
+     * A row whose children are {@code group}'s rows, expanded by {@link StoppedView}.
+     */
+    static DebugVariable groupRow(MusicStop.Group group, HandleRegistry handles) {
+        var reference = group.children().isEmpty() ? 0 : handles.register(group);
+        return new DebugVariable(group.name(), group.value(), "", null, reference, 0, false);
+    }
+
     /**
      * @param start The first list item to return
      * @param count How many list items to return, or 0 for all of them
@@ -49,7 +65,8 @@ final class ValueRows {
                     .map(field -> row(field.getName(), field.getValue(), child(handle.evaluateName(), "." + field.getName()), true, handles))
                     .toList();
             case QilletniType music when filter != ChildFilter.INDEXED && MusicValues.hasChildren(music) -> MusicValues.members(music, services).stream()
-                    .map(member -> row(member.name(), member.value(), member.accessor() == null ? null : child(handle.evaluateName(), member.accessor()), true, handles))
+                    .map(member -> member.row() != null ? musicRow(member.row(), handles)
+                            : row(member.name(), member.value(), member.accessor() == null ? null : child(handle.evaluateName(), member.accessor()), true, handles))
                     .toList();
             default -> List.of();
         };

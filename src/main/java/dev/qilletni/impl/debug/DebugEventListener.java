@@ -23,4 +23,9 @@ public interface DebugEventListener {
      * @param sourcePath The source's {@link SourceId#path()}
      */
     void breakpointChanged(String sourcePath, BreakpointResult result);
+
+    /**
+     * A weighted pick was made. Only called once enabled with {@link DebugController#setWeightEvents(boolean)}.
+     */
+    default void weightPicked(WeightPick pick) {}
 }

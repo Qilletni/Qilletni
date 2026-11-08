@@ -39,9 +39,11 @@ import dev.qilletni.impl.lang.types.entity.EntityDefinitionImpl;
 import dev.qilletni.impl.lang.types.entity.FunctionPopulator;
 import dev.qilletni.impl.lang.types.entity.UninitializedTypeImpl;
 import dev.qilletni.impl.lang.types.list.ListTypeTransformer;
+import dev.qilletni.impl.lang.types.weights.LazyWeightEntry;
 import dev.qilletni.impl.lang.types.weights.WeightEntryImpl;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1407,6 +1409,37 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         return new WeightsTypeImpl(weights);
     }
 
+    /**
+     * A weight entry that calls {@code expr} again in the scope it was written in every time it's picked.
+     */
+    private LazyWeightEntry lazyWeightEntry(QilletniParser.ExprContext expr, int weightAmount, WeightUnit weightUnit, boolean canRepeatTrack, boolean canRepeatWeight) {
+        var scope = symbolTable.currentScope();
+        var callText = expr.getStart().getInputStream().getText(Interval.of(expr.getStart().getStartIndex(), expr.getStop().getStopIndex()));
+
+        return new LazyWeightEntry(weightAmount, weightUnit, dynamicProvider, canRepeatTrack, canRepeatWeight, callText, () -> {
+            var song = runInScope(scope, () -> visitQilletniTypedNode(expr, SongType.class));
+            musicPopulator.populateSong(song);
+            return song.getTrack();
+        });
+    }
+
+    /**
+     * @return If {@code expr} is just a function call, e.g. {@code mySongFunc()} or {@code songs.next()}
+     */
+    private static boolean isCall(QilletniParser.ExprContext expr) {
+        ParseTree node = expr;
+        while (!(node instanceof QilletniParser.PostfixExprContext postfix)) {
+            if (node.getChildCount() != 1) {
+                return false;
+            }
+
+            node = node.getChild(0);
+        }
+
+        var suffixes = postfix.postfixSuffix();
+        return suffixes.isEmpty() ? postfix.primaryExpr().function_call() != null : suffixes.getLast().function_call() != null;
+    }
+
     @Override
     public WeightEntry visitSingle_weight(QilletniParser.Single_weightContext ctx) {
         var weightAmount = ctx.weight_amount();
@@ -1419,10 +1452,9 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         
         var weightUnit = WeightUnit.fromSymbol(weightAmount.WEIGHT_UNIT().getText());
         
-        // TODO: Reimplement functions in weights!
-//        if (ctx.expr().function_call() != null) {
-//            return new LazyWeightEntry(weightInt, weightUnit, dynamicProvider, canRepeatTrack, canRepeatWeight, visitQilletniTypedNode(ctx.expr(), SongType.class)::getTrack);
-//        }
+        if (isCall(ctx.expr())) {
+            return lazyWeightEntry(ctx.expr(), weightInt, weightUnit, canRepeatTrack, canRepeatWeight);
+        }
         
         QilletniType weightValue = visitQilletniTypedNode(ctx.expr());
         

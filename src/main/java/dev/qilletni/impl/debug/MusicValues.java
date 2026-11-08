@@ -10,6 +10,7 @@ import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.lang.types.*;
+import dev.qilletni.impl.lang.types.weights.LazyWeightEntry;
 import dev.qilletni.impl.lang.types.weights.WeightEntryImpl;
 import dev.qilletni.impl.music.DummyPlaylist;
 
@@ -27,8 +28,18 @@ final class MusicValues {
 
     /**
      * @param accessor The suffix that gets this member from its parent in Qilletni, or {@code null}
+     * @param row      A row shown instead of {@code value}, or {@code null}
      */
-    record Member(String name, QilletniType value, String accessor) {}
+    record Member(String name, QilletniType value, String accessor, MusicStop.Row row) {
+
+        Member(String name, QilletniType value, String accessor) {
+            this(name, value, accessor, null);
+        }
+
+        static Member row(MusicStop.Row row) {
+            return new Member(row.name(), null, null, row);
+        }
+    }
 
     record MusicServices(MusicPopulator populator, EntityDefinitionManager entities) {}
 
@@ -66,9 +77,7 @@ final class MusicValues {
     private static String songSummary(SongType song) {
         var track = peekTrack(song);
         if (track.isPresent()) {
-            var artist = track.get().getArtist();
-            return artist == null ? ValueFormatter.quote(track.get().getName())
-                    : "%s by %s".formatted(ValueFormatter.quote(track.get().getName()), ValueFormatter.quote(artist.getName()));
+            return trackText(track.get());
         }
 
         return switch (song.getSongDefinition()) {
@@ -76,6 +85,15 @@ final class MusicValues {
             case URL -> "%s (not loaded)".formatted(ValueFormatter.quote(song.getSuppliedUrl()));
             case PREPOPULATED -> "(not loaded)";
         };
+    }
+
+    /**
+     * @return e.g. {@code "Title" by "Artist"}
+     */
+    static String trackText(Track track) {
+        var artist = track.getArtist();
+        return artist == null ? ValueFormatter.quote(track.getName())
+                : "%s by %s".formatted(ValueFormatter.quote(track.getName()), ValueFormatter.quote(artist.getName()));
     }
 
     private static String albumSummary(AlbumType albumType) {
@@ -284,10 +302,58 @@ final class MusicValues {
         var members = new ArrayList<Member>(entries.size());
 
         for (int i = 0; i < entries.size(); i++) {
-            members.add(new Member(entryName(i, entries.get(i)), entrySource(entries.get(i)), null));
+            var entry = entries.get(i);
+            members.add(entry instanceof LazyWeightEntry ? Member.row(entryRow(entryName(i, entry), entry)) : new Member(entryName(i, entry), entrySource(entry), null));
         }
 
+        members.add(Member.row(chancesGroup(WeightChances.breakdown(weights))));
         return members;
+    }
+
+    /**
+     * One row per path to a leaf with its combined chance, then the miss chance and multiplier entries.
+     */
+    private static MusicStop.Group chancesGroup(WeightChances.Tree tree) {
+        var rows = new ArrayList<MusicStop.Row>();
+        var paths = WeightChances.leafPaths(tree);
+        var leaves = 0;
+
+        for (var path : paths) {
+            var leaf = path.getLast();
+            var name = String.join(" → ", path.stream().map(WeightChances.Node::name).toList());
+
+            if (leaf.kind().equals("multiplier")) {
+                var text = path.size() == 1 ? "copies in the collection's queue, not rolled" : "not used in nested weights";
+                rows.add(new MusicStop.Text(name, text));
+                continue;
+            }
+
+            leaves++;
+            var chance = WeightChances.percent(leaf.combined());
+            var size = leaf.listSize();
+            if (size > 0) {
+                chance += " (%s songs, %s each)".formatted(WeightChances.count(size), WeightChances.percent(leaf.combined() / size));
+            }
+
+            var entryRow = leaf.source() == null ? new MusicStop.Text("entry", leaf.sourceText()) : new MusicStop.Value("entry", leaf.source());
+            rows.add(new MusicStop.Group(name, chance, List.of(entryRow)));
+        }
+
+        if (tree.omitted() > 0) {
+            rows.add(new MusicStop.Text("… %s more".formatted(WeightChances.count(tree.omitted())), WeightChances.percent(tree.omittedChance())));
+        }
+
+        if (tree.miss() > 0) {
+            rows.add(new MusicStop.Text("miss", WeightChances.percent(tree.miss()) + " → the collection's own tracks"));
+        }
+
+        var pathCount = leaves + tree.omitted();
+        var value = "%s %s".formatted(WeightChances.count(pathCount), pathCount == 1 ? "path" : "paths");
+        if (tree.miss() > 0) {
+            value += ", %s miss".formatted(WeightChances.percent(tree.miss()));
+        }
+
+        return new MusicStop.Group("chances", value, rows);
     }
 
     /**
@@ -295,6 +361,20 @@ final class MusicValues {
      */
     static String entryName(int index, WeightEntry entry) {
         return "[%d] %s%s".formatted(index, weightPrefix(entry), weightAmount(entry));
+    }
+
+    /**
+     * @return A row named {@code name} showing what the entry picks from: the call for a function entry, otherwise the value
+     */
+    static MusicStop.Row entryRow(String name, WeightEntry entry) {
+        return entry instanceof LazyWeightEntry lazy ? new MusicStop.Text(name, lazy.getCallText()) : new MusicStop.Value(name, entrySource(entry));
+    }
+
+    /**
+     * @return Display text of what the entry picks from: the call for a function entry, otherwise the value
+     */
+    static String entrySourceText(WeightEntry entry) {
+        return entry instanceof LazyWeightEntry lazy ? lazy.getCallText() : ValueFormatter.value(entrySource(entry));
     }
 
     /**

@@ -103,10 +103,7 @@ public final class StoppedView {
     }
 
     private List<DebugVariable> musicRows(List<MusicStop.Row> rows) {
-        return rows.stream().map(row -> switch (row) {
-            case MusicStop.Value value -> ValueRows.row(value.name(), value.value(), null, false, handles);
-            case MusicStop.Group group -> new DebugVariable(group.name(), group.value(), "", null, handles.register(group), 0, false);
-        }).toList();
+        return rows.stream().map(row -> ValueRows.musicRow(row, handles)).toList();
     }
 
     private MusicValues.MusicServices musicServices() {

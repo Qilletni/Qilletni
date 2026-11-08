@@ -3,13 +3,20 @@ package dev.qilletni.impl.debug;
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.types.FunctionType;
 import dev.qilletni.api.lang.types.QilletniType;
+import dev.qilletni.api.lang.types.OrderableTracksType;
+import dev.qilletni.api.lang.types.WeightsType;
+import dev.qilletni.api.lang.types.weights.WeightEntry;
+import dev.qilletni.api.lang.types.weights.WeightTrackType;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.lang.types.SongTypeImpl;
+import dev.qilletni.impl.lang.types.weights.WeightEntryImpl;
+import dev.qilletni.impl.music.orchestration.WeightRejection;
 import dev.qilletni.impl.music.orchestration.WeightStep;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -50,6 +57,11 @@ public class DebugController implements ExecutionHooks {
     private int nextBreakpointId = 1;
 
     private static final QueueItem ABORT = new Abort();
+
+    /**
+     * The most rejected picks shown for one weighted pick.
+     */
+    static final int MAX_REJECTED = 20;
 
     private volatile boolean aborted;
 
@@ -102,6 +114,21 @@ public class DebugController implements ExecutionHooks {
      * The thread running the program, set when the first file is entered. Music played elsewhere never stops.
      */
     private volatile Thread interpreterThread;
+
+    /**
+     * Send a {@link WeightPick} to the listener for every weighted pick.
+     */
+    private volatile boolean weightEvents;
+
+    /**
+     * The outermost weights picked from so far, only touched on the interpreter thread.
+     */
+    private final Map<WeightsType, WeightsInfo> weightsInfo = new IdentityHashMap<>();
+
+    /**
+     * The same weights by {@link WeightPick#weightsId()}, for {@link #weightEntrySongs} from any thread.
+     */
+    private final Map<Integer, WeightsType> weightsById = new ConcurrentHashMap<>();
 
     /**
      * The latest error raised outside an evaluation while {@link #stopOnUncaught} was set, only touched on the
@@ -189,6 +216,10 @@ public class DebugController implements ExecutionHooks {
 
     public void setStopOnWeightSelected(boolean stopOnWeightSelected) {
         this.stopOnWeightSelected = stopOnWeightSelected;
+    }
+
+    public void setWeightEvents(boolean weightEvents) {
+        this.weightEvents = weightEvents;
     }
 
     public void setEventListener(DebugEventListener eventListener) {
@@ -449,8 +480,8 @@ public class DebugController implements ExecutionHooks {
     }
 
     @Override
-    public void weightSelected(List<WeightStep> path, Track track) {
-        if (!stopOnWeightSelected || !canStopForMusic() || path.isEmpty()) {
+    public void weightSelected(QilletniType owner, List<WeightStep> path, Track track) {
+        if (path.isEmpty() || !(weightEvents || stopOnWeightSelected) || !canStopForMusic()) {
             return;
         }
 
@@ -459,20 +490,202 @@ public class DebugController implements ExecutionHooks {
             return;
         }
 
+        if (weightEvents) {
+            sendWeightPick(owner, path.getFirst().weights(), "pick", path, song, track);
+        }
+
+        if (!stopOnWeightSelected) {
+            return;
+        }
+
         var steps = new ArrayList<MusicStop.Row>();
-        for (var step : path) {
-            var source = MusicValues.entrySource(step.entry());
-            steps.add(new MusicStop.Group(MusicValues.entryName(step.entryIndex(), step.entry()), ValueFormatter.value(source), List.of(
+        var combined = 100.0;
+        for (int i = 0; i < path.size(); i++) {
+            var step = path.get(i);
+            var selection = step.selection();
+            var chance = WeightChances.levelChance(step.weights(), step.entry(), i > 0);
+            combined = combined * chance / 100;
+
+            var children = new ArrayList<MusicStop.Row>(List.of(
                     new MusicStop.Value("weights", step.weights()),
-                    new MusicStop.Value("entry", source))));
+                    MusicValues.entryRow("entry", step.entry()),
+                    new MusicStop.Text("roll", WeightChances.number(selection.rollPercent()) + " of 100"),
+                    new MusicStop.Text("range", "[%s, %s)".formatted(WeightChances.number(selection.fromPercent()), WeightChances.number(selection.toPercent()))),
+                    new MusicStop.Text("chance", WeightChances.percent(chance))));
+            if (!step.rejected().isEmpty()) {
+                children.add(rejectedGroup(step.rejected()));
+            }
+
+            steps.add(new MusicStop.Group(MusicValues.entryName(step.entryIndex(), step.entry()), MusicValues.entrySourceText(step.entry()), children));
         }
 
         var pathText = String.join(" → ", steps.stream().map(MusicStop.Row::name).toList());
         var rows = List.<MusicStop.Row>of(
                 new MusicStop.Value("song", song),
+                new MusicStop.Text("chance", WeightChances.percent(combined)),
                 new MusicStop.Group("path", pathText, steps));
 
         suspend(frames.snapshot(), "weight selected", List.of(), "Weight selected: %s → %s".formatted(pathText, ValueFormatter.value(song)), null, new MusicStop("weight selected", rows));
+    }
+
+    @Override
+    public void weightMissed(QilletniType owner, WeightsType weights, Track track) {
+        if (!weightEvents || !canStopForMusic()) {
+            return;
+        }
+
+        var song = songOf(track);
+        if (song != null) {
+            sendWeightPick(owner, weights, "miss", List.of(), song, track);
+        }
+    }
+
+    private MusicStop.Group rejectedGroup(List<WeightRejection> rejections) {
+        var rows = new ArrayList<MusicStop.Row>();
+        for (var rejection : rejections.subList(0, Math.min(MAX_REJECTED, rejections.size()))) {
+            var rejectedSong = songOf(rejection.track());
+            var value = "%s (%s as last pick)".formatted(ValueFormatter.value(rejectedSong), reasonText(rejection.reason()));
+            rows.add(new MusicStop.Group(stepNames(rejection.attempt()), value, List.of(new MusicStop.Value("song", rejectedSong))));
+        }
+
+        if (rejections.size() > MAX_REJECTED) {
+            rows.add(new MusicStop.Text("…", "%d more".formatted(rejections.size() - MAX_REJECTED)));
+        }
+
+        return new MusicStop.Group("rejected", "%d %s".formatted(rejections.size(), rejections.size() == 1 ? "pick" : "picks"), rows);
+    }
+
+    /**
+     * Sends a {@link WeightPick} for a pick from {@code weights}, with its breakdown if it changed since the last one sent.
+     */
+    private void sendWeightPick(QilletniType owner, WeightsType weights, String kind, List<WeightStep> path, SongTypeImpl song, Track track) {
+        var listener = eventListener;
+        if (listener == null) {
+            return;
+        }
+
+        var info = weightsInfo.get(weights);
+        if (info == null) {
+            info = new WeightsInfo(weightsInfo.size() + 1, weightsLabel(owner));
+            weightsInfo.put(weights, info);
+            weightsById.put(info.id(), weights);
+        }
+
+        var breakdown = breakdown(WeightChances.breakdown(weights));
+        if (breakdown.equals(info.sentBreakdown())) {
+            breakdown = null;
+        } else {
+            info = new WeightsInfo(info.id(), info.label(), breakdown);
+            weightsInfo.put(weights, info);
+        }
+
+        var levels = new ArrayList<WeightPick.Level>(path.size());
+        var indices = new ArrayList<Integer>();
+        var names = new ArrayList<String>();
+        var rejected = new ArrayList<WeightPick.Rejected>();
+        var rejectedCount = 0;
+
+        for (int i = 0; i < path.size(); i++) {
+            var step = path.get(i);
+            var selection = step.selection();
+            var name = MusicValues.entryName(step.entryIndex(), step.entry());
+
+            for (var rejection : step.rejected()) {
+                rejectedCount++;
+                if (rejected.size() < MAX_REJECTED) {
+                    var attemptIndices = new ArrayList<>(indices);
+                    var attemptNames = new ArrayList<>(names);
+                    rejection.attempt().forEach(attempt -> {
+                        attemptIndices.add(attempt.entryIndex());
+                        attemptNames.add(MusicValues.entryName(attempt.entryIndex(), attempt.entry()));
+                    });
+                    rejected.add(new WeightPick.Rejected(attemptIndices, attemptNames, ValueFormatter.value(songOf(rejection.track())), reasonText(rejection.reason())));
+                }
+            }
+
+            levels.add(new WeightPick.Level(step.entryIndex(), name, selection.rollPercent(), selection.fromPercent(), selection.toPercent(),
+                    WeightChances.levelChance(step.weights(), step.entry(), i > 0)));
+            indices.add(step.entryIndex());
+            names.add(name);
+        }
+
+        listener.weightPicked(new WeightPick(info.id(), info.label(), kind, levels, ValueFormatter.value(song), track.getId(),
+                rejected, rejectedCount - rejected.size(), breakdown));
+    }
+
+    /**
+     * The songs of a list, collection or album entry, read from what was loaded when its weights were made, so this
+     * never loads music and is safe from any thread.
+     *
+     * @param weightsId A {@link WeightPick#weightsId()} already sent
+     * @param indices   The entry's index at each level, outermost first
+     * @throws IllegalArgumentException If there's no such entry, or it doesn't pick from songs
+     */
+    public WeightEntrySongs weightEntrySongs(int weightsId, List<Integer> indices) {
+        var weights = weightsById.get(weightsId);
+        if (weights == null || indices.isEmpty()) {
+            throw new IllegalArgumentException("No weights with id " + weightsId);
+        }
+
+        WeightEntry entry = null;
+        for (int i = 0; i < indices.size(); i++) {
+            var entries = weights.getWeightEntries();
+            int index = indices.get(i);
+            if (index < 0 || index >= entries.size()) {
+                throw new IllegalArgumentException("No weight entry at " + indices);
+            }
+
+            entry = entries.get(index);
+            if (i < indices.size() - 1) {
+                if (!(MusicValues.entrySource(entry) instanceof WeightsType inner)) {
+                    throw new IllegalArgumentException("Weight entry at " + indices.subList(0, i + 1) + " isn't nested weights");
+                }
+                weights = inner;
+            }
+        }
+
+        if (!(entry instanceof WeightEntryImpl impl) || entry.getTrackType() == WeightTrackType.FUNCTION) {
+            throw new IllegalArgumentException("Weight entry at " + indices + " doesn't pick from songs");
+        }
+
+        var songs = List.copyOf(impl.getKnownTracks()).stream()
+                .map(track -> new WeightEntrySongs.Song(MusicValues.trackText(track), track.getId()))
+                .toList();
+        var ownWeights = MusicValues.entrySource(entry) instanceof OrderableTracksType orderable ? orderable.getWeights() : null;
+        var evenChance = ownWeights == null || ownWeights.getWeightEntries().isEmpty();
+        return new WeightEntrySongs(songs, evenChance);
+    }
+
+    /**
+     * @return e.g. {@code weights(3 entries) @ main.ql:14}, using the innermost frame with a source
+     */
+    private String weightsLabel(QilletniType owner) {
+        var label = ValueFormatter.value(owner);
+        return frames.snapshot().stream().filter(frame -> frame.source() != null).findFirst()
+                .map(frame -> "%s @ %s:%d".formatted(label, frame.source().name(), frame.line()))
+                .orElse(label);
+    }
+
+    private static WeightPick.Breakdown breakdown(WeightChances.Tree tree) {
+        return new WeightPick.Breakdown(breakdownNodes(tree.roots()), tree.miss(), tree.omitted(), tree.omittedChance());
+    }
+
+    private static List<WeightPick.Node> breakdownNodes(List<WeightChances.Node> nodes) {
+        return nodes.stream()
+                .map(node -> new WeightPick.Node(node.name(), node.index(), node.kind(), node.chance(), node.combined(),
+                        node.sourceText(), node.listSize(), node.songCount(), breakdownNodes(node.children())))
+                .toList();
+    }
+
+    private static String stepNames(List<WeightStep> steps) {
+        return String.join(" → ", steps.stream().map(step -> MusicValues.entryName(step.entryIndex(), step.entry())).toList());
+    }
+
+    private static String reasonText(WeightRejection.Reason reason) {
+        return switch (reason) {
+            case SAME_TRACK -> "same track";
+            case SAME_ENTRY -> "same entry";
+        };
     }
 
     private boolean canStopForMusic() {
@@ -593,6 +806,16 @@ public class DebugController implements ExecutionHooks {
      * An error and the frames from where it was raised.
      */
     private record RaisedError(Throwable error, List<Frame> frames) {}
+
+    /**
+     * @param sentBreakdown The breakdown last sent for these weights, or {@code null}
+     */
+    private record WeightsInfo(int id, String label, WeightPick.Breakdown sentBreakdown) {
+
+        WeightsInfo(int id, String label) {
+            this(id, label, null);
+        }
+    }
 
     /**
      * Something for the stopped interpreter thread to take from its queue.

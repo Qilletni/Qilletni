@@ -12,11 +12,16 @@ import java.util.List;
  */
 record MusicStop(String event, List<Row> rows) {
 
-    sealed interface Row permits Value, Group {
+    sealed interface Row permits Value, Text, Group {
         String name();
     }
 
     record Value(String name, QilletniType value) implements Row {}
+
+    /**
+     * A row with display text only, e.g. a percentage.
+     */
+    record Text(String name, String value) implements Row {}
 
     /**
      * A row that only groups others. Compared by identity, so registering one never hashes the values under it.

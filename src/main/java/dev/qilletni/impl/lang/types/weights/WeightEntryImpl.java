@@ -39,7 +39,7 @@ public class WeightEntryImpl implements WeightEntry {
         this.dynamicProvider = dynamicProvider;
         this.canRepeatTrack = canRepeatTrack;
         this.canRepeatWeight = canRepeatWeight;
-        this.weightTrackType = WeightTrackType.SINGLE_TRACK;
+        this.weightTrackType = WeightTrackType.FUNCTION;
     }
 
     public WeightEntryImpl(int weightAmount, WeightUnit weightUnit, MusicPopulator musicPopulator, DynamicProvider dynamicProvider, SongType song, boolean canRepeatTrack, boolean canRepeatWeight) {
@@ -194,6 +194,31 @@ public class WeightEntryImpl implements WeightEntry {
     @Override
     public boolean isInconsistent() {
         return false;
+    }
+
+    /**
+     * @return The songs a list, collection or album entry picks from, already loaded, otherwise an empty list
+     */
+    public List<Track> getKnownTracks() {
+        return switch (weightTrackType) {
+            case LIST -> songList.getItems().stream()
+                    .filter(SongType.class::isInstance)
+                    .map(item -> ((SongType) item).getTrack())
+                    .toList();
+            case COLLECTION, ALBUM -> orderableTypeState instanceof OrderableTypeStateImpl state ? state.getTracks() : List.of();
+            default -> List.of();
+        };
+    }
+
+    /**
+     * @return How many songs a list, collection or album entry picks from, otherwise 0
+     */
+    public int getKnownTrackCount() {
+        return switch (weightTrackType) {
+            case LIST -> songList.getItems().size();
+            case COLLECTION, ALBUM -> orderableTypeState instanceof OrderableTypeStateImpl state ? state.getTracks().size() : 0;
+            default -> 0;
+        };
     }
 
     /**

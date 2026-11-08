@@ -3,6 +3,7 @@ package dev.qilletni.impl.debug;
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.types.FunctionType;
 import dev.qilletni.api.lang.types.QilletniType;
+import dev.qilletni.api.lang.types.WeightsType;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.impl.lang.QilletniVisitor;
 import dev.qilletni.impl.music.orchestration.WeightStep;
@@ -68,7 +69,15 @@ public interface ExecutionHooks {
     /**
      * An outermost weighted selection chose a track, which is about to be played or returned.
      *
-     * @param path The entry chosen at each level, outermost first
+     * @param owner The weights, collection or album being picked from
+     * @param path  The entry chosen at each level, outermost first
      */
-    default void weightSelected(List<WeightStep> path, Track track) {}
+    default void weightSelected(QilletniType owner, List<WeightStep> path, Track track) {}
+
+    /**
+     * A weighted collection or album's roll chose no entry, so a track from its own queue is about to be played.
+     *
+     * @param owner The collection or album being picked from
+     */
+    default void weightMissed(QilletniType owner, WeightsType weights, Track track) {}
 }
