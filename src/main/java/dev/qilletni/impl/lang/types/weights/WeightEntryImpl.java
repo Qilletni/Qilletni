@@ -8,6 +8,7 @@ import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.api.music.supplier.DynamicProvider;
+import dev.qilletni.impl.debug.SourceSpan;
 import dev.qilletni.impl.lang.types.orderable.OrderableTracksTypeInitializer;
 import dev.qilletni.impl.music.orchestration.OrderableTypeStateImpl;
 
@@ -194,6 +195,19 @@ public class WeightEntryImpl implements WeightEntry {
     @Override
     public boolean isInconsistent() {
         return false;
+    }
+
+    private SourceSpan sourceSpan;
+
+    /**
+     * @return Where the entry is written, or {@code null} if unknown
+     */
+    public SourceSpan getSourceSpan() {
+        return sourceSpan;
+    }
+
+    public void setSourceSpan(SourceSpan sourceSpan) {
+        this.sourceSpan = sourceSpan;
     }
 
     /**

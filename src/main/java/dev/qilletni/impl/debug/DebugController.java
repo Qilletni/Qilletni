@@ -673,7 +673,7 @@ public class DebugController implements ExecutionHooks {
     private static List<WeightPick.Node> breakdownNodes(List<WeightChances.Node> nodes) {
         return nodes.stream()
                 .map(node -> new WeightPick.Node(node.name(), node.index(), node.kind(), node.chance(), node.combined(),
-                        node.sourceText(), node.listSize(), node.songCount(), breakdownNodes(node.children())))
+                        node.sourceText(), node.listSize(), node.songCount(), node.amount(), node.sequential(), node.span(), breakdownNodes(node.children())))
                 .toList();
     }
 

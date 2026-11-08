@@ -1,6 +1,8 @@
 package dev.qilletni.impl.debug;
 
 import dev.qilletni.api.lang.types.ListType;
+import dev.qilletni.api.lang.types.OrderableTracksType;
+import dev.qilletni.api.lang.types.collection.CollectionOrder;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.WeightsType;
 import dev.qilletni.api.lang.types.weights.WeightEntry;
@@ -40,10 +42,13 @@ final class WeightChances {
      * @param source     The value the entry picks from, or {@code null} for a function entry
      * @param sourceText Display text of what the entry picks from, e.g. the call of a function entry
      * @param songCount  The number of songs a list, collection or album picks from, otherwise 0
+     * @param amount     The entry's amount as written, a percent or a multiplier
+     * @param sequential If the entry is a collection or album played in order
+     * @param span       Where the entry is written, or {@code null} if unknown
      * @param children   The nested entries of a {@code weights} node
      */
     record Node(String name, int index, String kind, double chance, double combined, QilletniType source, String sourceText,
-                int songCount, List<Node> children) {
+                int songCount, double amount, boolean sequential, SourceSpan span, List<Node> children) {
 
         int listSize() {
             return source instanceof ListType list ? list.getItems().size() : 0;
@@ -133,9 +138,12 @@ final class WeightChances {
             var source = entry instanceof LazyWeightEntry ? null : MusicValues.entrySource(entry);
             var sourceText = MusicValues.entrySourceText(entry);
             var songCount = entry instanceof WeightEntryImpl impl ? impl.getKnownTrackCount() : 0;
+            var amount = entry.getWeightAmount();
+            var sequential = source instanceof OrderableTracksType orderable && orderable.getOrder() == CollectionOrder.SEQUENTIAL;
+            var span = entry instanceof WeightEntryImpl impl ? impl.getSourceSpan() : null;
 
             if (entry.getWeightUnit() != WeightUnit.PERCENT) {
-                nodes.add(new Node(name, i, "multiplier", 0, 0, source, sourceText, 0, List.of()));
+                nodes.add(new Node(name, i, "multiplier", 0, 0, source, sourceText, 0, amount, false, span, List.of()));
                 continue;
             }
 
@@ -144,10 +152,10 @@ final class WeightChances {
             var kind = kind(entry);
 
             if (source instanceof WeightsType inner && depth < MAX_DEPTH && !visiting.contains(inner)) {
-                nodes.add(new Node(name, i, kind, chance, combined, source, sourceText, 0, nodes(inner, true, combined, visiting, depth + 1, counter)));
+                nodes.add(new Node(name, i, kind, chance, combined, source, sourceText, 0, amount, false, span, nodes(inner, true, combined, visiting, depth + 1, counter)));
             } else if (counter.leaves < MAX_LEAVES) {
                 counter.leaves++;
-                nodes.add(new Node(name, i, kind, chance, combined, source, sourceText, songCount, List.of()));
+                nodes.add(new Node(name, i, kind, chance, combined, source, sourceText, songCount, amount, sequential, span, List.of()));
             } else {
                 counter.omitted++;
                 counter.omittedChance += combined;

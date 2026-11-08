@@ -25,6 +25,7 @@ import dev.qilletni.impl.antlr.QilletniParserBaseVisitor;
 import dev.qilletni.impl.debug.BreakableLines;
 import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.debug.SourceId;
+import dev.qilletni.impl.debug.SourceSpan;
 import dev.qilletni.impl.lang.exceptions.*;
 import dev.qilletni.impl.lang.internal.BackgroundTaskExecutorImpl;
 import dev.qilletni.impl.lang.internal.FunctionInvokerImpl;
@@ -1442,6 +1443,18 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
 
     @Override
     public WeightEntry visitSingle_weight(QilletniParser.Single_weightContext ctx) {
+        var entry = weightEntry(ctx);
+        var source = sourceIds.get(ctx.getStart().getInputStream());
+        if (entry instanceof WeightEntryImpl impl && source != null) {
+            var stop = ctx.getStop();
+            var stopLength = stop.getStopIndex() - stop.getStartIndex() + 1;
+            impl.setSourceSpan(new SourceSpan(source, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine() + 1,
+                    stop.getLine(), stop.getCharPositionInLine() + 1 + stopLength));
+        }
+        return entry;
+    }
+
+    private WeightEntry weightEntry(QilletniParser.Single_weightContext ctx) {
         var weightAmount = ctx.weight_amount();
         var weightInt = Integer.parseInt(weightAmount.INT().getText());
 

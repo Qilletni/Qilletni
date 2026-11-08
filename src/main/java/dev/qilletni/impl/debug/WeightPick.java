@@ -44,7 +44,10 @@ public record WeightPick(int weightsId, String label, String kind, List<Level> p
      * @param source   Display text of the value the entry picks from
      * @param listSize  The number of songs for a {@code list} entry, otherwise 0
      * @param songCount The number of songs a list, collection or album entry picks from, otherwise 0
+     * @param amount    The entry's amount as written, a percent or a multiplier
+     * @param sequential If the entry is a collection or album played in order
+     * @param span      Where the entry is written, or {@code null} if unknown
      */
     public record Node(String name, int index, String kind, double chance, double combined, String source, int listSize,
-                       int songCount, List<Node> children) {}
+                       int songCount, double amount, boolean sequential, SourceSpan span, List<Node> children) {}
 }
