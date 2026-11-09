@@ -4,11 +4,9 @@ import dev.qilletni.api.lang.internal.FunctionInvoker;
 import dev.qilletni.api.lang.types.EntityType;
 import dev.qilletni.api.lang.table.Scope;
 import dev.qilletni.api.lang.types.FunctionType;
-import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.StringType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.impl.lang.exceptions.TypeMismatchException;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 import dev.qilletni.impl.lang.types.entity.EntityDefinitionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,26 +69,6 @@ public final class EntityTypeImpl implements EntityType {
     }
 
     // TODO: Operator overloading
-
-    @Override
-    public QilletniType plusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public void plusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
 
     @Override
     public String typeName() {

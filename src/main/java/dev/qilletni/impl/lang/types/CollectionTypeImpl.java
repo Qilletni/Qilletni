@@ -3,7 +3,6 @@ package dev.qilletni.impl.lang.types;
 import dev.qilletni.api.auth.ServiceProvider;
 import dev.qilletni.api.lang.types.CollectionType;
 import dev.qilletni.api.lang.types.EntityType;
-import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.WeightsType;
 import dev.qilletni.api.lang.types.collection.CollectionDefinition;
 import dev.qilletni.api.lang.types.collection.CollectionOrder;
@@ -15,7 +14,6 @@ import dev.qilletni.api.music.Playlist;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.supplier.DynamicProvider;
 import dev.qilletni.impl.SpotifyDataUtility;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 import dev.qilletni.impl.music.DummyPlaylist;
 
 import java.util.List;
@@ -161,26 +159,6 @@ public final class CollectionTypeImpl implements CollectionType {
         }
 
         return String.format("collection(\"%s\" by \"%s\")", name, creator);
-    }
-
-    @Override
-    public QilletniType plusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public void plusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
     }
 
     @Override

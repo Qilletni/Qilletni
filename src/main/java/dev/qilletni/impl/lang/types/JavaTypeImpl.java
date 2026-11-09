@@ -1,11 +1,9 @@
 package dev.qilletni.impl.lang.types;
 
 import dev.qilletni.api.lang.types.JavaType;
-import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.impl.lang.exceptions.TypeMismatchException;
 import dev.qilletni.impl.lang.exceptions.UnsetJavaReferenceException;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -44,26 +42,6 @@ public final class JavaTypeImpl implements JavaType {
     @Override
     public String stringValue() {
         return String.valueOf(reference);
-    }
-
-    @Override
-    public QilletniType plusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public void plusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
     }
 
     @Override

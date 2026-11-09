@@ -3,7 +3,6 @@ package dev.qilletni.impl.lang.types;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.StringType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
 import java.util.Objects;
 
@@ -51,16 +50,6 @@ public final class StringTypeImpl implements StringType {
     @Override
     public void plusOperatorInPlace(QilletniType qilletniType) {
         value = value + qilletniType.stringValue();
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
     }
 
     @Override

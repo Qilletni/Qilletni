@@ -9,7 +9,6 @@ import dev.qilletni.api.lang.types.entity.EntityDefinitionManager;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.music.Album;
 import dev.qilletni.api.music.supplier.DynamicProvider;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
 import java.util.Optional;
 
@@ -139,26 +138,6 @@ public final class AlbumTypeImpl implements AlbumType {
         }
 
         return String.format("album(\"%s\" by \"%s\")", album.getName(), album.getArtist().getName());
-    }
-
-    @Override
-    public QilletniType plusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public void plusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
     }
 
     @Override

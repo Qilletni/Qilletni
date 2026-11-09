@@ -11,7 +11,6 @@ import dev.qilletni.api.lang.types.song.SongDefinition;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.supplier.DynamicProvider;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 
 import java.util.Optional;
 
@@ -156,26 +155,6 @@ public final class SongTypeImpl implements SongType {
         var track = dynamicTrack.get();
 
         return String.format("song(\"%s\" by \"%s\")", track.getName(), track.getArtist().getName());
-    }
-
-    @Override
-    public QilletniType plusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public void plusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
     }
 
     @Override

@@ -1,5 +1,6 @@
 package dev.qilletni.api.lang.types;
 
+import dev.qilletni.api.exceptions.UnsupportedOperatorException;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 
 /**
@@ -30,16 +31,22 @@ public sealed interface QilletniType permits AnyType, ImportAliasType, StaticEnt
      *
      * @param qilletniType The other QilletniType used in the addition operation.
      * @return A new QilletniType representing the result of the addition operation.
+     * @throws UnsupportedOperatorException If this type does not support the operator (the default behavior)
      */
-    QilletniType plusOperator(QilletniType qilletniType);
+    default QilletniType plusOperator(QilletniType qilletniType) {
+        throw new UnsupportedOperatorException(this, qilletniType, "+");
+    }
 
     /**
      * Performs an addition operation on the current instance of a QilletniType and the specified QilletniType. This
      * QilletniType instance is mutated to reflect the result, unlike {@link #plusOperator(QilletniType)}.
      *
      * @param qilletniType The other QilletniType used in the addition operation.
+     * @throws UnsupportedOperatorException If this type does not support the operator (the default behavior)
      */
-    void plusOperatorInPlace(QilletniType qilletniType);
+    default void plusOperatorInPlace(QilletniType qilletniType) {
+        throw new UnsupportedOperatorException(this, qilletniType, "+");
+    }
 
     /**
      * Performs a subtraction operation between the current instance of a QilletniType and the provided QilletniType,
@@ -47,16 +54,33 @@ public sealed interface QilletniType permits AnyType, ImportAliasType, StaticEnt
      *
      * @param qilletniType The other QilletniType used in the subtraction operation.
      * @return A new QilletniType representing the result of the subtraction operation.
+     * @throws UnsupportedOperatorException If this type does not support the operator (the default behavior)
      */
-    QilletniType minusOperator(QilletniType qilletniType);
+    default QilletniType minusOperator(QilletniType qilletniType) {
+        throw new UnsupportedOperatorException(this, qilletniType, "-");
+    }
 
     /**
      * Performs a subtraction operation between the current instance of a QilletniType and the provided QilletniType. This
      * QilletniType instance is mutated to reflect the result, unlike {@link #minusOperator(QilletniType)}.
      *
      * @param qilletniType The other QilletniType used in the subtraction operation.
+     * @throws UnsupportedOperatorException If this type does not support the operator (the default behavior)
      */
-    void minusOperatorInPlace(QilletniType qilletniType);
+    default void minusOperatorInPlace(QilletniType qilletniType) {
+        throw new UnsupportedOperatorException(this, qilletniType, "-");
+    }
+
+    /**
+     * Performs a complement operation on the current instance of a QilletniType, returning the new value.
+     * This is a unary operation that does not take any other QilletniType as an argument.
+     *
+     * @return A new QilletniType representing the result of the complement operation.
+     * @throws UnsupportedOperatorException If this type does not support the operator (the default behavior)
+     */
+    default QilletniType complementOperator() {
+        throw new UnsupportedOperatorException(this, "'");
+    }
 
     /**
      * Retrieves the type name of the current QilletniType instance. If an Entity, it will return the name of the

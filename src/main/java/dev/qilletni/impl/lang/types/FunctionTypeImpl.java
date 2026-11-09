@@ -1,9 +1,7 @@
 package dev.qilletni.impl.lang.types;
 
 import dev.qilletni.api.lang.types.FunctionType;
-import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
 import org.antlr.v4.runtime.ParserRuleContext;
 
 import java.util.Arrays;
@@ -94,26 +92,6 @@ public final class FunctionTypeImpl implements FunctionType {
                 isNative ? "native " : "",
                 name,
                 String.join(",", params));
-    }
-
-    @Override
-    public QilletniType plusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public void plusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "+");
-    }
-
-    @Override
-    public QilletniType minusOperator(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
-    }
-
-    @Override
-    public void minusOperatorInPlace(QilletniType qilletniType) {
-        throw new UnsupportedOperatorException(this, qilletniType, "-");
     }
 
     @Override

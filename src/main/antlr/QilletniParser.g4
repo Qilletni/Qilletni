@@ -54,10 +54,13 @@ multiplicativeExpr
 // Unary operators
 // This handled Symbols, but returns a QilletniType (as some modify the values here)
 unaryExpr
+    // 2) Compliment
+    : unaryExpr COMPLEMENT
+
     // 1) Immutable NOT
-    : NOT unaryExpr
+    | NOT unaryExpr    
     
-    // 2) Immutable postfix expression
+    // 3) Immutable postfix expression
     | op=(INCREMENT | DECREMENT)? postfixExpr (LEFT_SBRACKET expr RIGHT_SBRACKET)? immutablePostfixExprSuffix?
     ;
 

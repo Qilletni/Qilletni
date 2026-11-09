@@ -36,6 +36,8 @@ MOD   : '%';
 ANDAND : '&&';
 OROR   : '||';
 
+COMPLEMENT : '\'';
+
 WEIGHTS_KEYWORD : 'weights';
 
 // keywords
