@@ -72,17 +72,6 @@ public sealed interface QilletniType permits AnyType, ImportAliasType, StaticEnt
     }
 
     /**
-     * Performs a complement operation on the current instance of a QilletniType, returning the new value.
-     * This is a unary operation that does not take any other QilletniType as an argument.
-     *
-     * @return A new QilletniType representing the result of the complement operation.
-     * @throws UnsupportedOperatorException If this type does not support the operator (the default behavior)
-     */
-    default QilletniType complementOperator() {
-        throw new UnsupportedOperatorException(this, "'");
-    }
-
-    /**
      * Retrieves the type name of the current QilletniType instance. If an Entity, it will return the name of the
      * Entity.
      *

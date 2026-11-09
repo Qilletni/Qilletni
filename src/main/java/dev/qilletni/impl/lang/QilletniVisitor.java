@@ -581,13 +581,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
 
     @Override
     public Optional<QilletniType> visitUnaryExpr(QilletniParser.UnaryExprContext ctx) {
-        // 1) Complement
-        if (ctx.COMPLEMENT() != null) {
-            var unaryExprVal = visitUnaryExpr(ctx.unaryExpr()).orElseThrow(FunctionDidntReturnException::new);
-            return Optional.ofNullable(unaryExprVal.complementOperator());
-        }
-        
-        // 2) Immutable NOT
+        // 1) Immutable NOT
         if (ctx.NOT() != null) {
             var unaryExprVal = visitUnaryExpr(ctx.unaryExpr()).orElseThrow(FunctionDidntReturnException::new);
             var value = TypeUtils.safelyCast(unaryExprVal, QilletniTypeClass.BOOLEAN, ctx.unaryExpr());
@@ -595,7 +589,7 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
             return Optional.of(new BooleanTypeImpl(!value.getValue()));
         }
         
-        // 3) Immutable postfix expression
+        // 2) Immutable postfix expression
         
         if (ctx.op != null && ctx.immutablePostfixExprSuffix() != null) { // cant do `++a += 1`
             throw new InvalidSyntaxException(ctx, "Cannot use increment/decrement operators with assignment operators");
