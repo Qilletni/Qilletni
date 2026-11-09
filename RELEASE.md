@@ -249,6 +249,75 @@ steps:
    release the consumer repository. If a release is necessary, do
    [Prepare a release](#prepare-a-release) in that repository. **(manual)**
 
+## Change a component and its consumers together
+
+Some changes need a change in a component and in its consumers at the same time. For
+example, a language change can need a change in `qilletni-core` and in
+`qilletni-toolchain`. Make the change on development (`-SNAPSHOT`) versions, and release
+in dependency order after the change merges.
+
+The dependency order is:
+
+- `qilletni-core` → `qilletni-docgen` → `qilletni-toolchain`
+- `qilletni-core` → `qpm`
+- `qilletni-pkgutil` → `qilletni-toolchain` and `qpm`
+
+1. Make a branch with the same name, for example `feature/foo`, in each repository that
+   the change touches. **(manual)**
+   - Do not change the version of a component for the change. A component stays on its
+     current `-SNAPSHOT` version.
+   - In each consumer, set the version key of the component (for example
+     `qilletniCoreVersion`) to the current `-SNAPSHOT` version of that component. Then
+     refresh the dependency locks. The `RELEASE.md` of each repository gives the
+     commands.
+2. Build locally with `-PincludeSiblingBuilds=true`. Gradle builds the sibling
+   checkouts from source, so you do not have to publish anything. **(manual)**
+3. Open a pull request in each repository. Link each pull request to the others.
+   **(manual)**
+
+<details>
+    <summary>What does the pull request CI do?</summary>
+
+- In a consumer, the linked build job looks for a branch with the same name in each
+  upstream repository. It checks out each branch that it finds next to the consumer, and
+  builds with `-PincludeSiblingBuilds=true`. If no upstream repository has the branch, the
+  job does not run. This job is not a required check.
+- In a consumer, the usual build job uses the published `-SNAPSHOT` version of each
+  upstream component. Until the upstream pull request merges, this job can fail. This is
+  correct: the consumer cannot merge before the upstream component.
+- In this repository, the `downstream` job builds each consumer of `qilletni-core`
+  against the pull request. It uses the branch with the same name if it exists, and
+  `master` if not. This job is not a required check.
+- On CI, Gradle does not keep `-SNAPSHOT` dependencies in its cache. A build always uses
+  the latest published `-SNAPSHOT` version.
+
+</details>
+
+4. Merge the upstream pull request first. Wait until its snapshot publish job is
+   complete. This usually takes a few minutes. **(manual)**
+5. In each consumer, run the build job of the pull request again. Make sure that it
+   passes with the new `-SNAPSHOT` version. Then merge the pull request soon, so that
+   `master` of the consumer does not stay incompatible with the upstream `master`.
+   **(manual)** For three levels, merge in order: `qilletni-core`, then
+   `qilletni-docgen`, then `qilletni-toolchain`.
+6. When you are ready, release in dependency order. Do
+   [Prepare a release](#prepare-a-release) in the upstream repository. **(manual)** The
+   dependency PR then sets the consumer to the stable version. Merge it, then release the
+   consumer.
+
+<details>
+    <summary>Why is this safe?</summary>
+
+- `checkNoSnapshotDependencies` stops only if the version of the repository itself is
+  stable. On a `-SNAPSHOT` version, it does nothing, so a consumer can use a `-SNAPSHOT`
+  dependency during development.
+- Each release gate uses a stable version: the test step of `Release - Prepare`, the
+  pull request CI of the release PR, and `build-and-publish`. A consumer that has a
+  `-SNAPSHOT` dependency thus cannot release, and the release PR is never opened.
+- Use `-PenforceReleaseDeps=true` to run the check on a `-SNAPSHOT` version.
+
+</details>
+
 ## Release the platform
 
 A platform release is one reviewed set of a QilletniToolchain release and a QPMCLI release.

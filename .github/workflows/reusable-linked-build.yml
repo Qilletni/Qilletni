@@ -1,0 +1,62 @@
+name: Reusable - Linked Build
+
+# Informational PR check for a consumer repository: builds the PR against the
+# same-named branches of its upstream Qilletni repos via the opt-in composite
+# build. Upstreams without that branch resolve from Maven. Skipped if none match.
+
+on:
+  workflow_call:
+    inputs:
+      upstreams:
+        description: "Space-separated upstream repository names in the Qilletni org, e.g. 'Qilletni QilletniPackageUtility'"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BRANCH: ${{ github.head_ref }}
+      SELF: ${{ github.event.repository.name }}
+    steps:
+      # Side-by-side clones so the consumer's settings.gradle ../<Repo> paths resolve.
+      - name: Clone same-named upstream branches
+        id: find
+        env:
+          UPSTREAMS: ${{ inputs.upstreams }}
+        run: |
+          found=false
+          for repo in $UPSTREAMS; do
+            url="https://github.com/Qilletni/${repo}.git"
+            if git ls-remote --exit-code --heads "$url" "refs/heads/${BRANCH}" > /dev/null; then
+              echo "Linking Qilletni/${repo}@${BRANCH}"
+              git clone --depth 1 --branch "$BRANCH" "$url" "$repo"
+              found=true
+            else
+              echo "No ${BRANCH} branch in Qilletni/${repo}; it resolves from Maven"
+            fi
+          done
+          echo "found=${found}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.find.outputs.found == 'true'
+        with:
+          path: ${{ env.SELF }}
+
+      - name: Set up JDK
+        if: steps.find.outputs.found == 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v5
+        if: steps.find.outputs.found == 'true'
+
+      - name: Build and test against the linked upstream branches
+        if: steps.find.outputs.found == 'true'
+        working-directory: ${{ env.SELF }}
+        run: ./gradlew clean build -PincludeSiblingBuilds=true
