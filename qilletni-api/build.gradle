@@ -108,9 +108,16 @@ tasks.register('japicmpCheck', JapicmpTask) {
 // project's own in-development version).
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
+// Enforced only on a release version; -PenforceReleaseDeps=true forces it on a snapshot.
 tasks.register('checkNoSnapshotDependencies') {
-    description = 'Fails if the resolved runtime/compile classpath contains a SNAPSHOT or dynamic external dependency version'
+    description = 'On a release version, fails if the resolved runtime/compile classpath contains a SNAPSHOT or dynamic external dependency version'
+    def ownVersion = project.version.toString()
+    def enforceReleaseDeps = providers.gradleProperty('enforceReleaseDeps').getOrElse('false').toBoolean()
     doLast {
+        if (ownVersion.endsWith('-SNAPSHOT') && !enforceReleaseDeps) {
+            logger.lifecycle("Skipping: ${ownVersion} is a development version, so SNAPSHOT dependencies are allowed (pass -PenforceReleaseDeps=true to check anyway).")
+            return
+        }
         def offenders = []
         ['runtimeClasspath', 'compileClasspath'].each { configName ->
             configurations.getByName(configName).incoming.resolutionResult.allComponents.each { component ->
