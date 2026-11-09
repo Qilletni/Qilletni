@@ -1,0 +1,82 @@
+name: PR CI
+
+# `downstream` (informational) builds each qilletni-core consumer against this PR,
+# using the consumer's same-named branch if it exists, else master.
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build and test (sibling composite builds explicitly disabled)
+        run: ./gradlew clean build -PincludeSiblingBuilds=false
+
+      - name: Guard against SNAPSHOT/dynamic dependencies on a stable version
+        run: ./gradlew :checkNoSnapshotDependencies :qilletni-api:checkNoSnapshotDependencies -PincludeSiblingBuilds=false
+
+  downstream:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/Qilletni'
+    strategy:
+      fail-fast: false
+      matrix:
+        consumer:
+          - QilletniToolchain
+          - QPMCLI
+          - QilletniDocgen
+    steps:
+      - name: Pick the consumer branch
+        id: ref
+        env:
+          BRANCH: ${{ github.head_ref }}
+          CONSUMER: ${{ matrix.consumer }}
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/Qilletni/${CONSUMER}.git" "refs/heads/${BRANCH}" > /dev/null; then
+            echo "Linking Qilletni/${CONSUMER}@${BRANCH}"
+            echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No ${BRANCH} branch in Qilletni/${CONSUMER}; using master"
+            echo "ref=master" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Side-by-side checkouts so the consumer's ../Qilletni path resolves.
+      - uses: actions/checkout@v7
+        with:
+          path: Qilletni
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Qilletni/${{ matrix.consumer }}
+          ref: ${{ steps.ref.outputs.ref }}
+          path: ${{ matrix.consumer }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build and test the consumer against this PR
+        working-directory: ${{ matrix.consumer }}
+        run: ./gradlew clean build -PincludeSiblingBuilds=true
