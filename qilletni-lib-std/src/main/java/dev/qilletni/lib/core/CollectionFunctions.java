@@ -189,26 +189,44 @@ public class CollectionFunctions {
     }
 
     public boolean isSubset(CollectionType collectionType, CollectionType col) {
-        throw new UnsupportedOperationException("Not implemented: isSubset");
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+        
+        return collectionATracks.containsAll(collectionBTracks);
     }
 
     public boolean isSuperset(CollectionType collectionType, CollectionType col) {
-        throw new UnsupportedOperationException("Not implemented: isSuperset");
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionBTracks.containsAll(collectionATracks);
     }
 
     public boolean isProperSubset(CollectionType collectionType, CollectionType col) {
-        throw new UnsupportedOperationException("Not implemented: isProperSubset");
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionATracks.containsAll(collectionBTracks) && !collectionATracks.equals(collectionBTracks);
     }
 
     public boolean isProperSuperset(CollectionType collectionType, CollectionType col) {
-        throw new UnsupportedOperationException("Not implemented: isProperSuperset");
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionBTracks.containsAll(collectionATracks) && !collectionATracks.equals(collectionBTracks);
     }
 
     public boolean isDisjoint(CollectionType collectionType, CollectionType col) {
-        throw new UnsupportedOperationException("Not implemented: isDisjoint");
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return !collectionATracks.containsAll(collectionBTracks) && !collectionBTracks.containsAll(collectionATracks);
     }
 
     public boolean overlaps(CollectionType collectionType, CollectionType col) {
-        throw new UnsupportedOperationException("Not implemented: overlaps");
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionATracks.containsAll(collectionBTracks) || collectionBTracks.containsAll(collectionATracks);
     }
 }
