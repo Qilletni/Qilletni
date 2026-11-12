@@ -63,7 +63,7 @@ public class TypeAdapterInvoker {
         }
 
         LOGGER.debug("Invoking method {} on {} with params {}", method.getName(), instance, invokingParams);
-        if (method.getName().equals("get")) {
+        if (method.getName().equals("get")) { // TODO: What is this, is this for HashMap?
             instance = null;
         }
         

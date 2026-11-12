@@ -70,7 +70,7 @@ native fun nextSong() on collection
 native fun getSongs() on collection
 
 /**
- * Returns a new collection that is a union of this and the provided collection, containing every song in either.
+ * Returns a new collection that is a union of this and the provided collection, containing every song in both.
  * The resulting collection is effectively a set: there will only be one of every song, and order is not preserved.
  *
  * @param col The collection to union with
