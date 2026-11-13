@@ -4,7 +4,7 @@ import dev.qilletni.api.lang.types.DoubleType;
 import dev.qilletni.api.lang.types.IntType;
 import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
-import dev.qilletni.impl.lang.exceptions.UnsupportedOperatorException;
+import dev.qilletni.api.exceptions.UnsupportedOperatorException;
 
 import java.util.Objects;
 

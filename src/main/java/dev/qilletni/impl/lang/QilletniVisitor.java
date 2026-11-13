@@ -1741,38 +1741,61 @@ public class QilletniVisitor extends QilletniParserBaseVisitor<Object> {
         var entityDefinition = entityDefinitionManager.lookup(ctx.ID().getText());
         return entityDefinition.createInstance(ctx.expr_list() == null ? Collections.emptyList() : visitNode(ctx.expr_list()));
     }
-
-    @Override
-    public CollectionType visitCollection_expr(QilletniParser.Collection_exprContext ctx) {
-        CollectionType collectionType;
+    
+    private CollectionTypeImpl createCollectionFromList(ListType songList) {
+        if (!songList.getSubType().equals(QilletniTypeClass.SONG)) {
+            throw new TypeMismatchException("Expected a song list, got a %s[]".formatted(songList.getSubType()));
+        }
         
+        // Ensure songs are populated before getting their tracks
+        songList.getItems().stream()
+                .map(SongType.class::cast)
+                .forEach(musicPopulator::populateSong);
+
+        var trackList = songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList();
+
+        return new CollectionTypeImpl(dynamicProvider, musicPopulator, trackList);
+    }
+    
+    private CollectionType calculateCollectionFromExpr(QilletniParser.Collection_exprContext ctx) {
         if (ctx.COLLECTION_TYPE() != null) {
-            ListType songList;
-            if (ctx.ID() != null) { // Is a list reference
-                var scope = symbolTable.currentScope();
-                songList = TypeUtils.safelyCast(scope.lookup(ctx.ID().getText()).getValue(), QilletniTypeClass.LIST);
-
-                if (!songList.getSubType().equals(QilletniTypeClass.SONG)) {
-                    throw new TypeMismatchException("Expected a song list, got a %s[]".formatted(songList.getSubType()));
-                }
-            } else {
-                songList = createListOfType(ctx.list_expression(), QilletniTypeClass.SONG);
+            if (ctx.list_expression() != null) {
+                var songList = createListOfType(ctx.list_expression(), QilletniTypeClass.SONG);
+                return createCollectionFromList(songList);
             }
+            
+            if (ctx.album_expr() != null) {
+                AlbumType albumType = visitQilletniTypedNode(ctx.album_expr());
+                return new CollectionTypeImpl(dynamicProvider, musicPopulator, dynamicProvider.getMusicCache().getAlbumTracks(albumType.getAlbum()));
+            }
+            
+            if (ctx.ID() != null) { // Is casting to an ID
+                var scope = symbolTable.currentScope();
+                QilletniType castingType = scope.lookup(ctx.ID().getText()).getValue();
 
-            // Ensure songs are populated before getting their tracks
-            songList.getItems().stream()
-                    .map(SongType.class::cast)
-                    .forEach(musicPopulator::populateSong);
-
-            collectionType = new CollectionTypeImpl(dynamicProvider, musicPopulator, songList.getItems().stream().map(SongType.class::cast).map(SongType::getTrack).toList());
+                if (castingType instanceof ListType listType) {
+                    return createCollectionFromList(listType);
+                } else if (castingType instanceof AlbumType albumType) {
+                    return new CollectionTypeImpl(dynamicProvider, musicPopulator, dynamicProvider.getMusicCache().getAlbumTracks(albumType.getAlbum()));
+                } else {
+                    throw new TypeMismatchException("Expected a song list or album, got a %s".formatted(castingType.typeName()));
+                }
+            }
+            
+            throw new IllegalStateException("Unexpected item in context");
         } else {
             var urlOrName = ctx.collection_url_or_name_pair();
             if (ctx.STRING() != null) {
-                collectionType = new CollectionTypeImpl(dynamicProvider, musicPopulator, StringUtility.removeQuotes(ctx.STRING().getText()));
+                return new CollectionTypeImpl(dynamicProvider, musicPopulator, StringUtility.removeQuotes(ctx.STRING().getText()));
             } else {
-                collectionType = new CollectionTypeImpl(dynamicProvider, musicPopulator, StringUtility.removeQuotes(urlOrName.STRING(0).getText()), StringUtility.removeQuotes(urlOrName.STRING(1).getText()));
+                return new CollectionTypeImpl(dynamicProvider, musicPopulator, StringUtility.removeQuotes(urlOrName.STRING(0).getText()), StringUtility.removeQuotes(urlOrName.STRING(1).getText()));
             }
         }
+    }
+
+    @Override
+    public CollectionType visitCollection_expr(QilletniParser.Collection_exprContext ctx) {
+        var collectionType = calculateCollectionFromExpr(ctx);
 
         parseOrderSettings(ctx.order_settings(), collectionType);
 

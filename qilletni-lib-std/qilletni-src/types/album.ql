@@ -32,3 +32,10 @@ native fun getArtist() on album
  * @returns[@type list] A list of all artists of the album
  */
 native fun getAllArtists() on album
+
+/**
+ * Returns a [@type collection] containin the songs in this album.
+ * 
+ * @returns[@type collection] The collection with the album's songs
+ */
+native fun toCollection() on album

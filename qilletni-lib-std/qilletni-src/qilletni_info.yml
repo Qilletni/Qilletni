@@ -1,11 +1,10 @@
 name: qilletni/std
-version: 1.0.1
+version: 1.0.2-SNAPSHOT
 author: Adam Yarris
 description: The standard library for the Qilletni language
 source_url: https://github.com/RubbaBoy/Qilletni/tree/master/qilletni-lib-std
 native_classes:
   - dev.qilletni.lib.core.AlbumFunctions
-  - dev.qilletni.lib.core.ArtistFunctions
   - dev.qilletni.lib.core.CollectionFunctions
   - dev.qilletni.lib.core.CoreFunctions
   - dev.qilletni.lib.core.ListFunctions

@@ -11,6 +11,7 @@ import dev.qilletni.api.music.MusicCache;
 import dev.qilletni.api.music.MusicPopulator;
 import dev.qilletni.api.music.Track;
 import dev.qilletni.api.music.factories.CollectionStateFactory;
+import dev.qilletni.api.music.factories.CollectionTypeFactory;
 import dev.qilletni.api.music.factories.SongTypeFactory;
 import dev.qilletni.api.music.orchestration.OrderableTypeState;
 import dev.qilletni.api.music.orchestration.TrackOrchestrator;
@@ -18,10 +19,7 @@ import dev.qilletni.api.music.supplier.DynamicProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @NativeOn("collection")
@@ -36,13 +34,14 @@ public class CollectionFunctions {
     private final MusicCache musicCache;
     private final TrackOrchestrator trackOrchestrator;
     private final CollectionStateFactory collectionStateFactory;
+    private final CollectionTypeFactory collectionTypeFactory;
     private final ListInitializer listInitializer;
 
     // TODO: Yeah this will probably (definitely) cause memory leaks
     //       Better fix this later or figure out a better way
     private static final Map<CollectionType, OrderableTypeState> collectionStates = new HashMap<>();
 
-    public CollectionFunctions(MusicPopulator musicPopulator, EntityDefinitionManager entityDefinitionManager, FunctionInvoker functionInvoker, SongTypeFactory songTypeFactory, DynamicProvider dynamicProvider, CollectionStateFactory collectionStateFactory, ListInitializer listInitializer) {
+    public CollectionFunctions(MusicPopulator musicPopulator, EntityDefinitionManager entityDefinitionManager, FunctionInvoker functionInvoker, SongTypeFactory songTypeFactory, DynamicProvider dynamicProvider, CollectionStateFactory collectionStateFactory, CollectionTypeFactory collectionTypeFactory, ListInitializer listInitializer) {
         this.musicPopulator = musicPopulator;
         this.entityDefinitionManager = entityDefinitionManager;
         this.functionInvoker = functionInvoker;
@@ -50,6 +49,7 @@ public class CollectionFunctions {
         this.musicCache = dynamicProvider.getMusicCache();
         this.trackOrchestrator = dynamicProvider.getTrackOrchestrator();
         this.collectionStateFactory = collectionStateFactory;
+        this.collectionTypeFactory = collectionTypeFactory;
         this.listInitializer = listInitializer;
     }
 
@@ -138,11 +138,95 @@ public class CollectionFunctions {
     public ListType getSongs(CollectionType collectionType) {
         List<Track> playlistTracks = musicCache.getPlaylistTracks(collectionType.getPlaylist());
 
-        var recommendedSongs = playlistTracks.stream()
+        var songList = playlistTracks.stream()
                 .map(songTypeFactory::createSongFromTrack)
                 .map(QilletniType.class::cast)
                 .toList();
 
-        return listInitializer.createList(recommendedSongs, QilletniTypeClass.SONG);
+        return listInitializer.createList(songList, QilletniTypeClass.SONG);
+    }
+
+    public CollectionType union(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        collectionATracks.addAll(collectionBTracks);
+
+        return collectionTypeFactory.createCollectionFromTracks(collectionATracks);
+    }
+
+    public CollectionType intersect(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        collectionATracks.retainAll(collectionBTracks);
+
+        return collectionTypeFactory.createCollectionFromTracks(collectionATracks);
+    }
+
+    public CollectionType difference(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        collectionATracks.removeAll(collectionBTracks);
+
+        return collectionTypeFactory.createCollectionFromTracks(collectionATracks);
+    }
+
+    public CollectionType symmetricDifference(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+        
+        var diff1 = new HashSet<>(collectionATracks);
+        diff1.removeAll(collectionBTracks);
+
+        var diff2 = new HashSet<>(collectionBTracks);
+        diff2.removeAll(collectionATracks);
+
+        diff1.addAll(diff2);
+
+        return collectionTypeFactory.createCollectionFromTracks(diff1);
+    }
+
+    public boolean isSubset(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+        
+        return collectionATracks.containsAll(collectionBTracks);
+    }
+
+    public boolean isSuperset(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionBTracks.containsAll(collectionATracks);
+    }
+
+    public boolean isProperSubset(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionATracks.containsAll(collectionBTracks) && !collectionATracks.equals(collectionBTracks);
+    }
+
+    public boolean isProperSuperset(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionBTracks.containsAll(collectionATracks) && !collectionATracks.equals(collectionBTracks);
+    }
+
+    public boolean isDisjoint(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return !collectionATracks.containsAll(collectionBTracks) && !collectionBTracks.containsAll(collectionATracks);
+    }
+
+    public boolean overlaps(CollectionType collectionType, CollectionType col) {
+        var collectionATracks = new HashSet<>(musicCache.getPlaylistTracks(collectionType.getPlaylist()));
+        var collectionBTracks = new HashSet<>(musicCache.getPlaylistTracks(col.getPlaylist()));
+
+        return collectionATracks.containsAll(collectionBTracks) || collectionBTracks.containsAll(collectionATracks);
     }
 }

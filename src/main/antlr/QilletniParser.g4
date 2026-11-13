@@ -127,7 +127,7 @@ str_expr
 
 collection_expr
     : collection_url_or_name_pair order_settings
-    | COLLECTION_TYPE LEFT_PAREN (list_expression | ID) RIGHT_PAREN order_settings
+    | COLLECTION_TYPE LEFT_PAREN (list_expression | album_expr | ID) RIGHT_PAREN order_settings
     | STRING
     ;
 
