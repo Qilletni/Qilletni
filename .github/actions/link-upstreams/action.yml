@@ -1,0 +1,42 @@
+name: Link upstream branches
+description: Clones same-named branches of upstream Qilletni repos next to the workspace
+inputs:
+  upstreams:
+    description: "Space-separated upstream repo names in the Qilletni org"
+    required: true
+outputs:
+  found:
+    description: "'true' if at least one upstream branch was linked"
+    value: ${{ steps.link.outputs.found }}
+runs:
+  using: composite
+  steps:
+    - id: link
+      shell: bash
+      env:
+        BRANCH: ${{ github.head_ref }}
+        UPSTREAMS: ${{ inputs.upstreams }}
+      run: |
+        case "$BRANCH" in
+          ""|master|release/*|dependency-update/*|chore/next-snapshot-*)
+            echo "Not linking upstreams for '${BRANCH:-<no PR branch>}'"
+            echo "found=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+        esac
+        parent=$(dirname "$GITHUB_WORKSPACE")
+        linked=()
+        for repo in $UPSTREAMS; do
+          url="https://github.com/Qilletni/${repo}.git"
+          if git ls-remote --exit-code --heads "$url" "refs/heads/${BRANCH}" > /dev/null; then
+            rm -rf "${parent:?}/${repo}"
+            git clone --depth 1 --branch "$BRANCH" "$url" "${parent}/${repo}"
+            linked+=("$repo")
+          else
+            echo "No ${BRANCH} branch in Qilletni/${repo}; it resolves from Maven"
+          fi
+        done
+        if (( ${#linked[@]} )); then
+          echo "::notice::Linked ${linked[*]}@${BRANCH}; Maven-only guards are skipped"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi

@@ -278,13 +278,16 @@ The dependency order is:
 <details>
     <summary>What does the pull request CI do?</summary>
 
-- In a consumer, the linked build job looks for a branch with the same name in each
-  upstream repository. It checks out each branch that it finds next to the consumer, and
-  builds with `-PincludeSiblingBuilds=true`. If no upstream repository has the branch, the
-  job does not run. This job is not a required check.
-- In a consumer, the usual build job uses the published `-SNAPSHOT` version of each
-  upstream component. Until the upstream pull request merges, this job can fail. This is
-  correct: the consumer cannot merge before the upstream component.
+- In a consumer, the required `build-and-test` job looks for a branch with the same name
+  in each configured upstream repository. It builds with sibling checkouts when at least
+  one matching branch exists; otherwise, it resolves upstream components from Maven.
+- When a consumer build links any upstream, it skips the checks that require published
+  Maven artifacts, including the snapshot guard and applicable lock or release-artifact
+  checks. When nothing is linked, those checks run as usual.
+- The link-upstreams action must be available on Qilletni `master` before consumer
+  workflows that reference it are used. Linking is disabled for push builds, `master`,
+  `release/*`, `dependency-update/*` and `chore/next-snapshot-*` branches, so automated
+  release and dependency-update PRs keep the strict Maven-based checks.
 - In this repository, the `downstream` job builds each consumer of `qilletni-core`
   against the pull request. It uses the branch with the same name if it exists, and
   `master` if not. This job is not a required check.
@@ -295,11 +298,12 @@ The dependency order is:
 
 4. Merge the upstream pull request first. Wait until its snapshot publish job is
    complete. This usually takes a few minutes. **(manual)**
-5. In each consumer, run the build job of the pull request again. Make sure that it
-   passes with the new `-SNAPSHOT` version. Then merge the pull request soon, so that
-   `master` of the consumer does not stay incompatible with the upstream `master`.
-   **(manual)** For three levels, merge in order: `qilletni-core`, then
-   `qilletni-docgen`, then `qilletni-toolchain`.
+5. In each consumer, delete the merged upstream branch (unless GitHub deletes it
+   automatically), then rerun the pull request's `build-and-test` job. This makes the
+   build resolve the published `-SNAPSHOT` and run the Maven-only checks. Make sure it
+   passes, then merge the consumer pull request soon so that `master` does not stay
+   incompatible with the upstream `master`. **(manual)** For three levels, merge in
+   order: `qilletni-core`, then `qilletni-docgen`, then `qilletni-toolchain`.
 6. When you are ready, release in dependency order. Do
    [Prepare a release](#prepare-a-release) in the upstream repository. **(manual)** The
    dependency PR then sets the consumer to the stable version. Merge it, then release the

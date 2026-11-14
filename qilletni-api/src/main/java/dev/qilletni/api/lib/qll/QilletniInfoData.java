@@ -10,7 +10,7 @@ import java.util.List;
  * @param author
  * @param dependencies
  */
-public record QilletniInfoData(String scope, String name, Version version, String author, String description, String sourceUrl, String providerClass, String nativeBindFactoryClass, List<String> nativeClasses, List<String> autoImportFiles, List<Dependency> dependencies) {
+public record QilletniInfoData(String scope, String name, Version version, ComparableVersion qilletniVersion, String author, String description, String sourceUrl, String providerClass, String nativeBindFactoryClass, List<String> nativeClasses, List<String> autoImportFiles, List<Dependency> dependencies) {
     
     public record Dependency(String scope, String name, ComparableVersion version) {}
     
