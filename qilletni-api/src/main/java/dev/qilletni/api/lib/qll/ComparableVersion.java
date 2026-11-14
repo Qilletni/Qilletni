@@ -57,6 +57,19 @@ public class ComparableVersion extends Version implements Comparable<ComparableV
     }
 
     /**
+     * Returns the {@link #getVersionString()} with the range specifier, such as {@code ~1.0.1}
+     * 
+     * @return The version string with the range specifier
+     */
+    public String getVersionWithSpecifier() {
+        if (rangeSpecifier == RangeSpecifier.EXACT) {
+            return getVersionString();
+        }
+        
+        return rangeSpecifier.getSpecifier() + getVersionString();
+    }
+
+    /**
      * Gets the range specifier for this version.
      *
      * @return The range specifier
