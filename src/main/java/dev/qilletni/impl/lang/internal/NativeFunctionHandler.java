@@ -7,6 +7,7 @@ import dev.qilletni.api.lang.types.QilletniType;
 import dev.qilletni.api.lang.types.typeclass.QilletniTypeClass;
 import dev.qilletni.api.lib.annotations.BeforeAnyInvocation;
 import dev.qilletni.api.lib.annotations.NativeOn;
+import dev.qilletni.api.lib.qll.QllInfo;
 import dev.qilletni.impl.debug.DebugAbortedException;
 import dev.qilletni.impl.debug.ExecutionHooks;
 import dev.qilletni.impl.lang.QilletniVisitor;
@@ -26,6 +27,7 @@ import java.lang.reflect.AccessFlag;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -79,7 +81,7 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
         injectableInstances.add(ScopedInjectableInstance.createWithPermittedClassNames(object, permittedClassNames));
     }
 
-    public void registerClasses(Class<?>... nativeMethodClass) {
+    public void registerClasses(QllInfo qllInfo, Class<?>... nativeMethodClass) {
         for (var clazz : nativeMethodClass) {
             var invokedOn = getNativeOn(clazz.getDeclaredAnnotations());
             var beforeAnyInvocationMethod = getBeforeAnyInvocationMethod(clazz).orElse(null);
@@ -97,9 +99,20 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
 //                    paramCount--;
 //                }
                 
-                LOGGER.debug("native func {} params: {}", declaredMethod.getName(), paramCount);
+                var sig = new MethodSignature(declaredMethod.getName(), paramCount, methodInvokedOn.orElse(null));
+                var newMetadata = new InvocableMethodMetadata(qllInfo, clazz, clazz.getProtectionDomain().getCodeSource().getLocation());
                 
-                nativeMethods.put(new MethodSignature(declaredMethod.getName(), paramCount, methodInvokedOn.orElse(null)), new InvocableMethod(declaredMethod, beforeAnyInvocationMethod));
+                LOGGER.debug("native func {} params: {} on: {}", declaredMethod.getName(), paramCount, methodInvokedOn.map(QilletniTypeClass::getTypeName).orElse(null));
+                
+                if (nativeMethods.containsKey(sig)) {
+                    var existingMetadata = nativeMethods.get(sig).metadata();
+                    LOGGER.warn("Duplicate native method signature: {}  parms = {} on={}", declaredMethod.getName(), paramCount, methodInvokedOn.map(QilletniTypeClass::getTypeName).orElse(null));
+                    LOGGER.warn("\tOriginal: Library: {}, class {} in {}", existingMetadata.qllInfo().name(), existingMetadata.clazz().getCanonicalName(), existingMetadata.jarSource());
+                    LOGGER.warn("\tDuplicate: Library: {}, class {} in {}", newMetadata.qllInfo().name(), newMetadata.clazz().getCanonicalName(), newMetadata.jarSource());
+                    continue;
+                }
+                
+                nativeMethods.put(sig, new InvocableMethod(declaredMethod, beforeAnyInvocationMethod, newMetadata));
             }
         }
     }
@@ -254,8 +267,18 @@ public class NativeFunctionHandler implements NativeFunctionClassInjector {
      * @param beforeAny A nullable, class-wide method that is invoked before any methods in the class are invoked. This
      *                  is used for setup of objects where many methods in a class have repeating behavior (e.g.
      *                  populating music-related types.  
+     * @param metadata Metadata about the method
      */
-    record InvocableMethod(Method method, Method beforeAny) {}
+    record InvocableMethod(Method method, Method beforeAny, InvocableMethodMetadata metadata) {}
+
+    /**
+     * Metadata for an invocable method.
+     * 
+     * @param qllInfo   The qll the loaded the method
+     * @param clazz     The class that loaded the method
+     * @param jarSource The source of the jar that loaded the method
+     */
+    record InvocableMethodMetadata(QllInfo qllInfo, Class<?> clazz, URL jarSource) {}
 
     /**
      * A record that holds an instance that may be injected into a native method's class' constructor. If the scope is
