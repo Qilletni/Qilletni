@@ -110,7 +110,7 @@ public class ComparableVersion extends Version implements Comparable<ComparableV
      */
     public enum RangeSpecifier {
         /**
-         * Permits newer minor and match versions, so the {@code x} of {@code 1.x.x}.
+         * Permits newer minor and patch versions, so the {@code x} of {@code 1.x.x}.
          */
         CARET('^') {
             @Override
