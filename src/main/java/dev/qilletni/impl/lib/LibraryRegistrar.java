@@ -38,7 +38,7 @@ public class LibraryRegistrar {
                 } else {
                     libraries.put(qllInfo.name(), qllInfo);
                     var classes = loadNativeClasses(qllInfo.nativeClasses());
-                    nativeFunctionHandler.registerClasses(classes);
+                    nativeFunctionHandler.registerClasses(qllInfo, classes);
 
                     var packageConfig = PackageConfigImpl.createPackageConfig(qllInfo.name());
                     nativeFunctionHandler.addScopedInjectableInstance(packageConfig, List.of(classes));
