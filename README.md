@@ -30,7 +30,7 @@ See the [Getting Started page](https://qilletni.dev/quickstart/getting_started/)
 
 ## Install
 
-Requires Java 22 or newer.
+Requires Java 27 or newer.
 
 ```bash
 curl -L https://install.qilletni.dev/ | bash

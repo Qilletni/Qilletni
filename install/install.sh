@@ -25,7 +25,7 @@ BLOCK_END="# <<< qilletni <<<"
 # Single-quoted so $HOME expands when the profile is sourced, not now.
 # shellcheck disable=SC2016
 ENV_LINE='. "$HOME/.qilletni/env"'
-JAVA_MIN=22
+JAVA_MIN=27
 USER_DATA="config.json packages packages-local persistence doc-cache logs cache"
 
 opt_snapshot=0
