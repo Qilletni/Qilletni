@@ -119,9 +119,8 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
-          java-version: '22'
+          java-version: '27'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - uses: gradle/actions/setup-gradle@v5
 

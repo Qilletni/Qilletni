@@ -38,9 +38,8 @@ jobs:
         if: steps.marker.outputs.is_release == 'true'
         uses: actions/setup-java@v5
         with:
-          java-version: '22'
+          java-version: '27'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - uses: gradle/actions/setup-gradle@v5
         if: steps.marker.outputs.is_release == 'true'

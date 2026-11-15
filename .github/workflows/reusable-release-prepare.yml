@@ -190,9 +190,8 @@ jobs:
         if: steps.component.outputs.kind == 'maven' || steps.component.outputs.kind == 'cli'
         uses: actions/setup-java@v5
         with:
-          java-version: '22'
+          java-version: '27'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - uses: gradle/actions/setup-gradle@v5
         if: steps.component.outputs.kind == 'maven' || steps.component.outputs.kind == 'cli'

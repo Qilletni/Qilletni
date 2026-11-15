@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'maven-publish'
     id 'me.champeau.gradle.japicmp' version '0.4.6'
-    id 'org.cyclonedx.bom' version '3.2.4'
+    id 'org.cyclonedx.bom' version '3.6.1'
 }
 
 group = 'dev.qilletni.api'
@@ -16,9 +16,9 @@ dependencyLocking {
 }
 
 dependencies {
-    implementation 'org.jetbrains:annotations:24.0.1'
+    implementation 'org.jetbrains:annotations:26.1.0'
 
-    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.code.gson:gson:2.15.0'
 }
 
 mavenPublishing {

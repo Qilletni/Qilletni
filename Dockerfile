@@ -1,4 +1,4 @@
-FROM eclipse-temurin:24-jdk
+FROM eclipse-temurin:27-jre
 
 ARG SNAPSHOT=false
 ARG PLATFORM_VERSION=snapshot
